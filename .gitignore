@@ -1,0 +1,7 @@
+*.cpp
+*.h
+.idea/*
+*.o
+*.vcd
+project/
+target/
