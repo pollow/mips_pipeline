@@ -69,25 +69,26 @@ class RegisterFile extends Module {
 }
 
 class ID2EXESignals extends Bundle {
-  val data_a  = UInt(OUTPUT, 32)
-  val data_b  = UInt(OUTPUT, 32)
-  val imm     = UInt(OUTPUT, 32)
-  val pc      = UInt(OUTPUT, 32)
-  val alu_op  = UInt(OUTPUT, alu_len)
+  val data_a = UInt(OUTPUT, 32)
+  val data_b = UInt(OUTPUT, 32)
+  val imm = UInt(OUTPUT, 32)
+  val pc4 = UInt(OUTPUT, 32)
+  val alu_op = UInt(OUTPUT, alu_len)
   val op1_sel = UInt(OUTPUT, op1_len)
   val op2_sel = UInt(OUTPUT, op2_len)
-  val wb_sel  = UInt(OUTPUT, wb_len)
-  val wb_dst  = UInt(OUTPUT, 5)
-  val rf_wen  = Bool(OUTPUT)
+  val wb_sel = UInt(OUTPUT, wb_len)
+  val wb_dst = UInt(OUTPUT, 5)
+  val rf_wen = Bool(OUTPUT)
   val mem_ren = Bool(OUTPUT)
   val mem_wen = Bool(OUTPUT)
+  val bpc     = UInt(OUTPUT, 32)
 }
 
 class PipeID extends Module {
   val io = new Bundle {
     // IF input
     val inst = UInt(INPUT, 32)
-    val pc   = UInt(INPUT, 32)
+    val pc4  = UInt(INPUT, 32)
 
     // wb input
     val wb_rf_wen   = Bool(INPUT)
@@ -100,7 +101,6 @@ class PipeID extends Module {
     // output test regfile
     val rf_addr_t = UInt(INPUT, 5)
     val rf_data_t = UInt(OUTPUT, 32)
-    val ext = Bool(OUTPUT)
   }
 
   // split inst
@@ -186,6 +186,8 @@ class PipeID extends Module {
     reg_rd -> rd
   ))
 
+  val bpc = io.pc4 + (sign_imm << UInt(2))
+
   val reg_wb_dst  = Reg(init = UInt(0), next = id_wb_addr)
 
   val reg_data_a = Reg(init = UInt(0), next = id_data_a)
@@ -193,7 +195,9 @@ class PipeID extends Module {
 
   val reg_imm = Reg(init = UInt(0), next = id_ext_imm)
 
-  val reg_pc = Reg(init = UInt(0), next = io.pc)
+  val reg_pc4 = Reg(init = UInt(0), next = io.pc4)
+
+  val reg_bpc = Reg(init = UInt(0), next = bpc)
 
   val reg_alu_op = Reg(init = alu_x, next = alu_op)
 
@@ -207,7 +211,8 @@ class PipeID extends Module {
   io.ctrl.data_a  := reg_data_a
   io.ctrl.data_b  := reg_data_b
   io.ctrl.imm     := reg_imm
-  io.ctrl.pc      := reg_pc
+  io.ctrl.pc4     := reg_pc4
+  io.ctrl.bpc     := reg_bpc
   io.ctrl.alu_op  := reg_alu_op
   io.ctrl.op1_sel := reg_op1_sel
   io.ctrl.op2_sel := reg_op2_sel
@@ -217,14 +222,12 @@ class PipeID extends Module {
   io.ctrl.mem_ren := reg_mem_ren
   io.ctrl.mem_wen := reg_mem_wen
 
-  val reg_ext = Reg(init = xext, next = extend_type)
-  io.ext          := extend_type
 }
 
 class PipeIDTests(c : PipeID) extends Tester(c) {
   // init
   poke(c.io.inst, 0)
-  poke(c.io.pc, 0)
+  poke(c.io.pc4, 0)
   poke(c.io.wb_rf_wen , 0)
   poke(c.io.wb_rf_addr, 0)
   poke(c.io.wb_rf_data, 0)
@@ -248,7 +251,7 @@ class PipeIDTests(c : PipeID) extends Tester(c) {
 
     // split inst
     poke(c.io.inst, inst)
-    poke(c.io.pc, pc * 4)
+    poke(c.io.pc4, (pc + 1) * 4)
 
     val opcode = c.io.inst(31, 26)
     val rs     = c.io.inst(25, 21)
@@ -269,11 +272,30 @@ class PipeIDTests(c : PipeID) extends Tester(c) {
     step(1)
 
     expect(c.io.inst, inst)
-    expect(c.io.pc, pc * 4)
+    expect(c.io.pc4, (pc + 1) * 4)
   }
 
   step(2)
 }
+
+/*
+class PipeEXE extends Module {
+  val io = new Bundle {
+    val id = new ID2EXESignals().flip()
+  }
+
+  val op1 = MuxLookup(io.id.op1_sel, UInt(0), Array(
+    op1_a -> io.id.data_a
+  ))
+
+  val op2 = MuxLookup(io.id.op2_sel, UInt(0), Array(
+    op2_b -> io.id.data_b,
+    op2_imm -> io.id.imm
+  ))
+
+  val zero = op1 === op2
+}
+*/
 
 class PipeIF extends Module {
   val io = new Bundle {
