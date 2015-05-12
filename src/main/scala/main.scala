@@ -9,8 +9,17 @@ import Chisel._
 import if_stage._
 
 class Top extends Module {
-  val io = new Bundle();
+  val io = new Bundle {
+    val pc = UInt(OUTPUT, 32)
+    val inst = UInt(INPUT, 32)
+  }
 
+  val cpu = Module(new CoreCPU()).io
+  val mem = Module(new Memory()).io
+
+  cpu.mem <> mem
+  io.pc := cpu.pc
+  cpu.inst := io.inst
 }
 
 class TopTests(c : Top) extends Tester(c) {
