@@ -3,5 +3,12 @@
 .idea/*
 *.o
 *.vcd
+*.v
 project/
 target/
+
+# EXEC
+PipeID
+PipeIF
+PipePC
+Top

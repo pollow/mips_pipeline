@@ -78,11 +78,11 @@ trait ControlSignal {
   val db_x  = UInt(0, db_size)
 
   // write back register selection
-  val reg_size = 2
+  val reg_size = 3
   val reg_len = log2(reg_size)
   val reg_rt = UInt(0, reg_size)
   val reg_rd = UInt(1, reg_size)
-  val reg_ra = UInt(3, reg_size)
+  val reg_ra = UInt(2, reg_size)
   val reg_x  = UInt(0, reg_size)
 
   // operand 1 selection
@@ -104,7 +104,7 @@ trait ControlSignal {
   val xext  = Bool(false)
 
   // write back selection
-  val wb_size = 2
+  val wb_size = 3
   val wb_len = log2(wb_size)
   val wb_alu  = UInt(0, wb_size)
   val wb_pc   = UInt(1, wb_size)
@@ -140,13 +140,16 @@ with ControlSignal
     0x001087c3,
     0xac120000,
     0x8c130000,
-    0x2252ffff,
+    0x20010001,
+    0x02419022,
     0x12530002,
     0x22520001,
-    0x0800000d,
+    0x0800000e,
     0x16530002,
     0x2272ffff,
-    0x08000010
+    0x08000011,
+    0x08000014
+
   )
 
 }

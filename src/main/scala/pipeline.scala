@@ -77,7 +77,7 @@ class ID2EXESignals extends Bundle {
   val op1_sel = UInt(OUTPUT, op1_len)
   val op2_sel = UInt(OUTPUT, op2_len)
   val wb_sel  = UInt(OUTPUT, wb_len)
-  val wb_dst  = UInt(OUTPUT, reg_len)
+  val wb_dst  = UInt(OUTPUT, 5)
   val rf_wen  = Bool(OUTPUT)
   val mem_ren = Bool(OUTPUT)
   val mem_wen = Bool(OUTPUT)
@@ -100,6 +100,7 @@ class PipeID extends Module {
     // output test regfile
     val rf_addr_t = UInt(INPUT, 5)
     val rf_data_t = UInt(OUTPUT, 32)
+    val ext = Bool(OUTPUT)
   }
 
   // split inst
@@ -162,7 +163,7 @@ class PipeID extends Module {
       NOP_  -> List(Y, br_n,  da_x, db_x, xext, op1_x, op2_x, alu_x  , wb_x,     reg_x,  N, N, N)
     ))
 
-  val (valid_signal : Bool) :: br_type :: extend_type :: data_a_sel :: data_b_sel :: op1_sel :: op2_sel :: alu_op :: wb_sel :: reg_dst :: (rf_wen : Bool) :: (mem_ren : Bool) :: (mem_wen : Bool) :: Nil = id_ctrl_signals
+  val (valid_signal : Bool) :: br_type :: data_a_sel :: data_b_sel :: extend_type :: op1_sel :: op2_sel :: alu_op :: wb_sel :: reg_dst :: (rf_wen : Bool) :: (mem_ren : Bool) :: (mem_wen : Bool) :: Nil = id_ctrl_signals
 
   val id_data_a = MuxLookup(data_a_sel, da_a, Array(
     da_a -> regfile.data_a
@@ -179,6 +180,14 @@ class PipeID extends Module {
     zext -> zero_imm
   ))
 
+  val id_wb_addr = MuxLookup(reg_dst, UInt(0), Array(
+    reg_ra -> UInt(31),
+    reg_rt -> rt,
+    reg_rd -> rd
+  ))
+
+  val reg_wb_dst  = Reg(init = UInt(0), next = id_wb_addr)
+
   val reg_data_a = Reg(init = UInt(0), next = id_data_a)
   val reg_data_b = Reg(init = UInt(0), next = id_data_b)
 
@@ -191,7 +200,6 @@ class PipeID extends Module {
   val reg_op1_sel = Reg(init = op1_x, next = op1_sel)
   val reg_op2_sel = Reg(init = op2_x, next = op2_sel)
   val reg_wb_sel  = Reg(init = wb_x,  next = wb_sel)
-  val reg_wb_dst  = Reg(init = reg_x, next = reg_dst)
   val reg_rf_wen  = Reg(init = N, next = rf_wen)
   val reg_mem_ren = Reg(init = N, next = mem_ren)
   val reg_mem_wen = Reg(init = N, next = mem_wen)
@@ -208,6 +216,9 @@ class PipeID extends Module {
   io.ctrl.rf_wen  := reg_rf_wen
   io.ctrl.mem_ren := reg_mem_ren
   io.ctrl.mem_wen := reg_mem_wen
+
+  val reg_ext = Reg(init = xext, next = extend_type)
+  io.ext          := extend_type
 }
 
 class PipeIDTests(c : PipeID) extends Tester(c) {
@@ -260,6 +271,8 @@ class PipeIDTests(c : PipeID) extends Tester(c) {
     expect(c.io.inst, inst)
     expect(c.io.pc, pc * 4)
   }
+
+  step(2)
 }
 
 class PipeIF extends Module {
