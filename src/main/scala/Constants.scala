@@ -8,6 +8,10 @@ package common
 
 import Chisel._
 
+object log2{
+  def apply(x:Int) : Int = if (x <= 1) 1 else scala.math.ceil(scala.math.log(x) / scala.math.log(2)).toInt
+}
+
 object MIPSInstructions {
   def ADD_                = Bits("b000000????????????????????100000")
   def SUB_                = Bits("b000000????????????????????100010")
@@ -45,12 +49,16 @@ trait AddressConstants {
 }
 
 trait PCSourceConstants {
-  val pc_plus4 :: branch_pc :: jump_pc :: jr_pc :: Nil = Enum(UInt(), 3)
+  val pc_sel_size = 4
+  val pc_sel_len = log2(pc_sel_size)
+  val pc_plus4 :: branch_pc :: jump_pc :: jr_pc :: Nil = Enum(UInt(), pc_sel_size)
 }
 
 trait ALUOpConstants {
-  val alu_add :: alu_sub :: alu_or :: alu_and :: alu_xor :: alu_slt :: alu_sll :: alu_srl :: alu_sra :: alu_lui :: Nil= Enum(UInt(), 4)
-  val alu_x = UInt(0, 4)
+  val alu_size = 10
+  val alu_len = log2(alu_size)
+  val alu_add :: alu_sub :: alu_or :: alu_and :: alu_xor :: alu_slt :: alu_sll :: alu_srl :: alu_sra :: alu_lui :: Nil= Enum(UInt(), alu_size)
+  val alu_x = UInt(0, alu_len)
 }
 
 trait ControlSignal {
@@ -58,27 +66,37 @@ trait ControlSignal {
   val N   = Bool(false)
 
   // rf data port A selection
-  val da_a  = UInt(0, 3)
-  val da_x  = UInt(0, 3)
+  val da_size = 2
+  val da_len = log2(da_size)
+  val da_a  = UInt(0, da_size)
+  val da_x  = UInt(0, da_size)
 
   // rf data port B selection
-  val db_b  = UInt(0, 3)
-  val db_x  = UInt(0, 3)
+  val db_size = 2
+  val db_len = log2(db_size)
+  val db_b  = UInt(0, db_size)
+  val db_x  = UInt(0, db_size)
 
   // write back register selection
-  val reg_rt = UInt(0, 2)
-  val reg_rd = UInt(1, 2)
-  val reg_ra = UInt(3, 2)
-  val reg_x  = UInt(0, 2)
+  val reg_size = 2
+  val reg_len = log2(reg_size)
+  val reg_rt = UInt(0, reg_size)
+  val reg_rd = UInt(1, reg_size)
+  val reg_ra = UInt(3, reg_size)
+  val reg_x  = UInt(0, reg_size)
 
   // operand 1 selection
-  val op1_a = UInt(0)
-  val op1_x = UInt(0)
+  val op1_size = 1
+  val op1_len = log2(op1_size)
+  val op1_a = UInt(0, op1_size)
+  val op1_x = UInt(0, op1_size)
 
   // operand 2 selection
-  val op2_b = UInt(0, 1)
-  val op2_imm = UInt(1, 1)
-  val op2_x = UInt(0, 1)
+  val op2_size = 1
+  val op2_len = log2(op2_size)
+  val op2_b   = UInt(0, op2_size)
+  val op2_imm = UInt(1, op2_size)
+  val op2_x   = UInt(0, op2_size)
 
   // sign/zero extend
   val sext  = Bool(true)
@@ -86,17 +104,21 @@ trait ControlSignal {
   val xext  = Bool(false)
 
   // write back selection
-  val wb_alu  = UInt(0, 2)
-  val wb_pc   = UInt(1, 2)
-  val wb_mem  = UInt(2, 2)
-  val wb_x    = UInt(2, 0)
+  val wb_size = 2
+  val wb_len = log2(wb_size)
+  val wb_alu  = UInt(0, wb_size)
+  val wb_pc   = UInt(1, wb_size)
+  val wb_mem  = UInt(2, wb_size)
+  val wb_x    = UInt(2, wb_size)
 
   // branch
-  val br_n  = UInt(0, 3)
-  val br_eq = UInt(1, 3)
-  val br_ne = UInt(2, 3)
-  val br_jr = UInt(3, 3)
-  val br_j  = UInt(4, 3)
+  val br_size = 3
+  val br_len = log2(br_size)
+  val br_n  = UInt(0, br_size)
+  val br_eq = UInt(1, br_size)
+  val br_ne = UInt(2, br_size)
+  val br_jr = UInt(3, br_size)
+  val br_j  = UInt(4, br_size)
 
 }
 
@@ -105,8 +127,27 @@ with PCSourceConstants
 with ALUOpConstants
 with ControlSignal
 {
-
-  class MIPSInstructions
+  val test_instructions = List(
+    0x20100005,
+    0x30110000,
+    0x36310003,
+    0x02119020,
+    0x02119822,
+    0x0211a024,
+    0x0211a825,
+    0x00108082,
+    0x001087c0,
+    0x001087c3,
+    0xac120000,
+    0x8c130000,
+    0x2252ffff,
+    0x12530002,
+    0x22520001,
+    0x0800000d,
+    0x16530002,
+    0x2272ffff,
+    0x08000010
+  )
 
 }
 
