@@ -105,14 +105,14 @@ trait ControlSignal {
 
   // write back selection
   val wb_size = 3
-  val wb_len = log2(wb_size)
+  val wb_len  = log2(wb_size)
   val wb_alu  = UInt(0, wb_size)
   val wb_pc   = UInt(1, wb_size)
   val wb_mem  = UInt(2, wb_size)
-  val wb_x    = UInt(2, wb_size)
+  val wb_x    = UInt(0, wb_size)
 
   // branch
-  val br_size = 3
+  val br_size = 5
   val br_len = log2(br_size)
   val br_n  = UInt(0, br_size)
   val br_eq = UInt(1, br_size)
@@ -140,15 +140,14 @@ with ControlSignal
     0x001087c3,
     0xac120000,
     0x8c130000,
-    0x20010001,
-    0x02419022,
+    0x2252ffff,
     0x12530002,
     0x22520001,
-    0x0800000e,
+    0x0800000d,
     0x16530002,
     0x2272ffff,
-    0x08000011,
-    0x08000014
+    0x08000010,
+    0x08000013
 
   )
 

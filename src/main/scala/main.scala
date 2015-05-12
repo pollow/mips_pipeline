@@ -21,6 +21,7 @@ object Top {
   def main(args: Array[String]): Unit = {
     args.foreach(arg => println(arg))
     // chiselMainTest(args, () => Module(new PipePC())) { c => new PipePCTests(c) }
-    chiselMainTest(args, () => Module(new PipeID())) { c => new PipeIDTests(c) }
+    // chiselMainTest(args, () => Module(new PipeID())) { c => new PipeIDTests(c) }
+    chiselMainTest(args, () => Module(new IDandEXE())) { c => new PipeEXETests(c) }
   }
 }

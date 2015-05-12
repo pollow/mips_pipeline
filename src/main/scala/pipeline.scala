@@ -72,16 +72,19 @@ class ID2EXESignals extends Bundle {
   val data_a = UInt(OUTPUT, 32)
   val data_b = UInt(OUTPUT, 32)
   val imm = UInt(OUTPUT, 32)
+  val shamt = UInt(OUTPUT, 5)
   val pc4 = UInt(OUTPUT, 32)
   val alu_op = UInt(OUTPUT, alu_len)
   val op1_sel = UInt(OUTPUT, op1_len)
   val op2_sel = UInt(OUTPUT, op2_len)
   val wb_sel = UInt(OUTPUT, wb_len)
   val wb_dst = UInt(OUTPUT, 5)
+  val bpc     = UInt(OUTPUT, 32)
+  val jpc     = UInt(OUTPUT, 32)
+  val br_type = UInt(OUTPUT, br_len)
   val rf_wen = Bool(OUTPUT)
   val mem_ren = Bool(OUTPUT)
   val mem_wen = Bool(OUTPUT)
-  val bpc     = UInt(OUTPUT, 32)
 }
 
 class PipeID extends Module {
@@ -138,9 +141,9 @@ class PipeID extends Module {
       OR_   -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_or , wb_alu, reg_rd, Y, N, N),
       XOR_  -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_xor, wb_alu, reg_rd, Y, N, N),
       SLT_  -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_slt, wb_alu, reg_rd, Y, N, N),
-      SLL_  -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_sll, wb_alu, reg_rd, Y, N, N),
-      SRL_  -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_srl, wb_alu, reg_rd, Y, N, N),
-      SRA_  -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_sra, wb_alu, reg_rd, Y, N, N),
+      SLL_  -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_sll, wb_alu, reg_rd, Y, N, N),
+      SRL_  -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_srl, wb_alu, reg_rd, Y, N, N),
+      SRA_  -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_sra, wb_alu, reg_rd, Y, N, N),
 
       JR_   -> List(Y, br_jr, da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_pc , reg_ra, N, N, N),
       JALR_ -> List(Y, br_jr, da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_pc , reg_ra, Y, N, N),
@@ -187,20 +190,18 @@ class PipeID extends Module {
   ))
 
   val bpc = io.pc4 + (sign_imm << UInt(2))
+  val jpc = Cat(io.pc4(31, 28), addr, Fill(2, UInt(0)))
 
+  val reg_shamt   = Reg(init = UInt(0), next = sa)
+  val reg_br_type = Reg(init = br_n, next = br_type)
   val reg_wb_dst  = Reg(init = UInt(0), next = id_wb_addr)
-
-  val reg_data_a = Reg(init = UInt(0), next = id_data_a)
-  val reg_data_b = Reg(init = UInt(0), next = id_data_b)
-
-  val reg_imm = Reg(init = UInt(0), next = id_ext_imm)
-
-  val reg_pc4 = Reg(init = UInt(0), next = io.pc4)
-
-  val reg_bpc = Reg(init = UInt(0), next = bpc)
-
-  val reg_alu_op = Reg(init = alu_x, next = alu_op)
-
+  val reg_data_a  = Reg(init = UInt(0), next = id_data_a)
+  val reg_data_b  = Reg(init = UInt(0), next = id_data_b)
+  val reg_imm     = Reg(init = UInt(0), next = id_ext_imm)
+  val reg_pc4     = Reg(init = UInt(0), next = io.pc4)
+  val reg_bpc     = Reg(init = UInt(0), next = bpc)
+  val reg_jpc     = Reg(init = UInt(0), next = jpc)
+  val reg_alu_op  = Reg(init = alu_x, next = alu_op)
   val reg_op1_sel = Reg(init = op1_x, next = op1_sel)
   val reg_op2_sel = Reg(init = op2_x, next = op2_sel)
   val reg_wb_sel  = Reg(init = wb_x,  next = wb_sel)
@@ -211,8 +212,10 @@ class PipeID extends Module {
   io.ctrl.data_a  := reg_data_a
   io.ctrl.data_b  := reg_data_b
   io.ctrl.imm     := reg_imm
+  io.ctrl.shamt   := reg_shamt
   io.ctrl.pc4     := reg_pc4
   io.ctrl.bpc     := reg_bpc
+  io.ctrl.jpc     := reg_jpc
   io.ctrl.alu_op  := reg_alu_op
   io.ctrl.op1_sel := reg_op1_sel
   io.ctrl.op2_sel := reg_op2_sel
@@ -221,7 +224,7 @@ class PipeID extends Module {
   io.ctrl.rf_wen  := reg_rf_wen
   io.ctrl.mem_ren := reg_mem_ren
   io.ctrl.mem_wen := reg_mem_wen
-
+  io.ctrl.br_type := reg_br_type
 }
 
 class PipeIDTests(c : PipeID) extends Tester(c) {
@@ -278,10 +281,24 @@ class PipeIDTests(c : PipeID) extends Tester(c) {
   step(2)
 }
 
-/*
+class EXE2MEMSignals extends Bundle {
+  val alu_out = UInt(OUTPUT, 32)
+  val data_b  = UInt(OUTPUT, 32)
+  val bpc     = UInt(OUTPUT, 32)
+  val jpc     = UInt(OUTPUT, 32)
+  val wb_dst  = UInt(OUTPUT, 5)
+  val wb_sel  = UInt(OUTPUT, wb_len)
+  val br_type = UInt(OUTPUT, br_len)
+  val brt     = Bool(OUTPUT)
+  val rf_wen  = Bool(OUTPUT)
+  val mem_ren = Bool(OUTPUT)
+  val mem_wen = Bool(OUTPUT)
+}
+
 class PipeEXE extends Module {
   val io = new Bundle {
     val id = new ID2EXESignals().flip()
+    val ctrl = new EXE2MEMSignals()
   }
 
   val op1 = MuxLookup(io.id.op1_sel, UInt(0), Array(
@@ -293,9 +310,190 @@ class PipeEXE extends Module {
     op2_imm -> io.id.imm
   ))
 
-  val zero = op1 === op2
+  val alu_equ = op1 === op2
+
+  val exe_brt = MuxLookup(io.id.br_type, Bool(false), Array(
+    br_n  -> Bool(false),
+    br_eq -> alu_equ,
+    br_ne -> !alu_equ,
+    br_j  -> Bool(true),
+    br_jr -> Bool(true)
+  ))
+
+  val exec_alu_out = MuxLookup(io.id.alu_op, UInt(0), Array(
+    alu_add -> (op1 + op2)(31, 0),
+    alu_sub -> (op1 - op2),
+    alu_and -> (op1 & op2),
+    alu_or  -> (op1 | op2),
+    alu_xor -> (op1 ^ op2),
+    alu_slt -> (op1 < op2).toUInt(),
+    alu_sll -> (op2 << io.id.shamt)(31, 0).toUInt(),
+    alu_srl -> (op2 >> io.id.shamt)(31, 0).toUInt(),
+    alu_sra -> (op2.toSInt() >> io.id.shamt).toUInt(),
+    alu_lui -> Cat(op2(15, 0), Fill(16, UInt(0)))
+  ))
+
+  // TODO JAL support
+
+  val reg_br_type  = Reg(init = UInt(0),     next = io.id.br_type)
+  val reg_exe_brt  = Reg(init = Bool(false), next = exe_brt)
+  val reg_exec_out = Reg(init = UInt(0),     next = exec_alu_out)
+  val reg_data_b   = Reg(init = UInt(0),     next = io.id.data_b)
+  val reg_rf_wen   = Reg(init = UInt(0),     next = io.id.rf_wen)
+  val reg_mem_ren  = Reg(init = UInt(0),     next = io.id.mem_ren)
+  val reg_mem_wen  = Reg(init = UInt(0),     next = io.id.mem_wen)
+  val reg_wb_sel   = Reg(init = UInt(0),     next = io.id.wb_sel)
+  val reg_wb_dst   = Reg(init = UInt(0),     next = io.id.wb_dst)
+  val reg_bpc      = Reg(init = UInt(0),     next = io.id.bpc)
+  val reg_jpc      = Reg(init = UInt(0),     next = io.id.jpc)
+
+  io.ctrl.alu_out := reg_exec_out
+  io.ctrl.data_b  := reg_data_b
+  io.ctrl.rf_wen  := reg_rf_wen
+  io.ctrl.mem_ren := reg_mem_ren
+  io.ctrl.mem_wen := reg_mem_wen
+  io.ctrl.wb_sel  := reg_wb_sel
+  io.ctrl.wb_dst  := reg_wb_dst
+  io.ctrl.bpc     := reg_bpc
+  io.ctrl.jpc     := reg_jpc
+  io.ctrl.brt     := Bool(false)
+  io.ctrl.br_type := reg_br_type
 }
-*/
+
+class IDandEXE extends Module {
+  val io = new Bundle {
+    // IF input
+    val inst = UInt(INPUT, 32)
+    val pc4  = UInt(INPUT, 32)
+
+    // wb input
+    val wb_rf_wen   = Bool(INPUT)
+    val wb_rf_addr  = UInt(INPUT, 5)
+    val wb_rf_data  = UInt(INPUT, 32)
+
+    // output
+    val exe_out = new EXE2MEMSignals()
+  }
+
+  val id = Module(new PipeID())
+  val exe = Module(new PipeEXE())
+
+  id.io.inst := io.inst
+  id.io.pc4  := io.pc4
+  id.io.wb_rf_wen   := io.wb_rf_wen
+  id.io.wb_rf_addr  := io.wb_rf_addr
+  id.io.wb_rf_data  := io.wb_rf_data
+  exe.io.id <> id.io.ctrl
+
+  io.exe_out := exe.io.ctrl
+}
+
+class PipeEXETests(c : IDandEXE) extends Tester(c) {
+  // init
+  poke(c.io.inst, 0)
+  poke(c.io.pc4, 0)
+  poke(c.io.wb_rf_wen , 0)
+  poke(c.io.wb_rf_addr, 0)
+  poke(c.io.wb_rf_data, 0)
+
+  for( i <- 0 to 31) {
+    poke(c.io.wb_rf_wen , 1)
+    poke(c.io.wb_rf_addr, i)
+    poke(c.io.wb_rf_data, i * 100)
+
+    step(1)
+  }
+
+  for((inst, pc) <- test_instructions.zipWithIndex) {
+
+    // split inst
+    poke(c.io.inst, inst)
+    poke(c.io.pc4, (pc + 1) * 4)
+
+    // do not test regfile
+    poke(c.io.wb_rf_wen , 0)
+    poke(c.io.wb_rf_addr, 0)
+    poke(c.io.wb_rf_data, 0)
+
+    step(1)
+
+  }
+  step(10)
+}
+
+class MEMSignals extends Bundle {
+  val wen = Bool(INPUT)
+  val addr = UInt(INPUT, 32)
+  val data_a = UInt(INPUT, 32)
+
+  val data_b = UInt(OUTPUT, 32)
+}
+
+class MEM2WBSignals extends Bundle {
+  val alu_out  = UInt(OUTPUT, 32)
+  val mem_data = UInt(OUTPUT, 32)
+  val mem_ren  = Bool(OUTPUT)
+  val wb_dst  = UInt(OUTPUT, 5)
+  val wb_sel  = UInt(OUTPUT, wb_len)
+  val rf_wen  = Bool(OUTPUT)
+}
+
+class Memory extends Module {
+  val io = new MEMSignals()
+
+  val memory = Mem(UInt(width = 32), 32)
+
+  when (io.wen) {
+    memory(io.addr) := io.data_a
+    io.data_b := UInt(0)
+  } .otherwise {
+    io.data_b := memory(io.addr)
+  }
+}
+
+class PipeMEM extends Module {
+  val io = new Bundle {
+    val exe = new EXE2MEMSignals().flip()
+    val mem = new MEMSignals().flip() // output
+    val ctrl = new MEM2WBSignals()
+  }
+
+  // Branch Taken
+  val pcsource = UInt(0, pc_sel_len)
+  when (io.exe.brt) {
+    pcsource := MuxLookup(io.exe.br_type, pc_plus4, Array(
+      br_eq -> branch_pc,
+      br_ne -> branch_pc,
+      br_j  -> jump_pc,
+      br_n  -> pc_plus4
+    ))
+  }
+
+  // Mem operation
+
+  io.mem.wen    := io.exe.mem_wen
+  io.mem.addr   := io.exe.alu_out
+  io.mem.data_a := io.exe.data_b
+
+  val mem_rdata = io.mem.data_b
+
+  // reg buffer
+  val reg_mem_ren = Reg(init = UInt(0), next = io.exe.mem_ren)
+  val reg_rf_wen  = Reg(init = UInt(0), next = io.exe.rf_wen)
+  val reg_mem_rd  = Reg(init = UInt(0), next = mem_rdata)
+  val reg_alu_out = Reg(init = UInt(0), next = io.exe.alu_out)
+  val reg_wb_sel  = Reg(init = UInt(0), next = io.exe.wb_sel)
+  val reg_wb_dst  = Reg(init = UInt(0), next = io.exe.wb_dst)
+
+  // output
+
+  io.ctrl.alu_out := reg_alu_out
+  io.ctrl.mem_data := reg_mem_rd
+  io.ctrl.mem_ren := reg_mem_ren
+  io.ctrl.wb_dst := reg_wb_dst
+  io.ctrl.wb_sel := reg_wb_sel
+  io.ctrl.rf_wen := reg_rf_wen
+}
 
 class PipeIF extends Module {
   val io = new Bundle {
@@ -367,3 +565,4 @@ class PipeIFTests(c : PipeIF) extends Tester(c) {
     expect(c.io.inst, m)
   }
 }
+
