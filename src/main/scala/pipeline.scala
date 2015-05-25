@@ -51,17 +51,21 @@ class RegisterFilePorts extends Bundle {
   val addr_w = UInt(INPUT, 5)
   val data_w = Bits(INPUT, 32)
   val wen    = Bool(INPUT)
+
+  // required debug
+  val regs   = Bits(OUTPUT, 32*32)
 }
 
 class RegisterFile extends Module {
   val io = new RegisterFilePorts()
 
-  val regfile = Mem(Bits(width = 32), 32)
+  val regfile = Vec.fill(32) { Reg(Bits(width = 32)) }
 
   when (io.wen && (io.addr_w != UInt(0))) {
     regfile(io.addr_w) := io.data_w
   }
 
+  io.regs := regfile.toBits()
   io.data_a := regfile(io.addr_a)
   io.data_b := regfile(io.addr_b)
   io.data_t := regfile(io.addr_t)
@@ -112,6 +116,9 @@ class PipeID extends Module {
     // output test regfile
     val rf_addr_t = UInt(INPUT, 5)
     val rf_data_t = UInt(OUTPUT, 32)
+
+    // required debug info
+    val regs     = Bits(OUTPUT, 32*32)
   }
 
   // split inst
@@ -138,6 +145,8 @@ class PipeID extends Module {
 
   regfile.addr_t := io.rf_addr_t
   io.rf_data_t   := regfile.data_t
+
+  io.regs := regfile.regs
 
   val id_ctrl_signals =  ListLookup(io.inst,
   // valid, branch, da, db, ext, op1, op2, ALU_op, wb_sel, reg_wb, rf_w, mem_ren, mem_wen
@@ -604,6 +613,9 @@ class CoreCPU extends Module {
     val mem = new MEMSignals().flip()
     val pc = UInt(OUTPUT, 32)
     val inst = UInt(INPUT, 32)
+
+    // required debug info
+    val regs = Bits(OUTPUT, 32*32)
   }
 
   val IF  = Module(new PipeIF ).io
@@ -621,6 +633,7 @@ class CoreCPU extends Module {
 
   ID.pc4 := IF.pc
   ID.inst := IF.inst
+  io.regs := ID.regs
 
   // io.mem.addr   := MEM.mem.addr
   // io.mem.wen    := MEM.mem.wen
