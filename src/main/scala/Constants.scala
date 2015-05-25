@@ -58,7 +58,7 @@ trait ALUOpConstants {
   val alu_size = 10
   val alu_len = log2(alu_size)
   val alu_add :: alu_sub :: alu_or :: alu_and :: alu_xor :: alu_slt :: alu_sll :: alu_srl :: alu_sra :: alu_lui :: Nil= Enum(UInt(), alu_size)
-  val alu_x = UInt(0, alu_len)
+  val alu_x = alu_add
 }
 
 trait ControlSignal {

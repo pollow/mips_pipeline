@@ -6,9 +6,10 @@ package arclab.pipeline
 package top
 
 import Chisel._
-import if_stage._
+import arclab.pipeline.stages._
+import arclab.pipeline.common.Constants._
 
-class Top extends Module {
+class Main extends Module {
   val io = new Bundle {
     val pc = UInt(OUTPUT, 32)
     val inst = UInt(INPUT, 32)
@@ -22,15 +23,23 @@ class Top extends Module {
   cpu.inst := io.inst
 }
 
-class TopTests(c : Top) extends Tester(c) {
-
+class TopTests(c : Main) extends Tester(c) {
+  poke(c.io.inst, 0)
+  step(2)
+  reset(1)
+  for(i <- 0 to 40) {
+    val pc = peek(c.io.pc).toInt >> 2
+    poke(c.io.inst, if (pc < test_instructions.length) test_instructions(pc) else 0)
+    step(1)
+  }
 }
 
 object Top {
   def main(args: Array[String]): Unit = {
     args.foreach(arg => println(arg))
-    // chiselMainTest(args, () => Module(new PipePC())) { c => new PipePCTests(c) }
+    // chiselMainTest(args, () => Module(new PipeIF())) { c => new PipeIFTests(c) }
     // chiselMainTest(args, () => Module(new PipeID())) { c => new PipeIDTests(c) }
-    chiselMainTest(args, () => Module(new IDandEXE())) { c => new PipeEXETests(c) }
+    // chiselMainTest(args, () => Module(new IDandEXE())) { c => new PipeEXETests(c) }
+    chiselMainTest(args, () => Module(new Main())) { c => new TopTests(c) }
   }
 }
