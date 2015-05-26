@@ -5,41 +5,6 @@ import Chisel._
 import common.Constants._
 import common.MIPSInstructions._
 
-class PipePC extends Module {
-  val io = new Bundle{
-    val npc = UInt(INPUT, width = 32)
-    val wpc = Bool(INPUT)
-    val pc  = UInt(OUTPUT, width = 32)
-  }
-
-  val pc_r = Reg(init = StartPC)
-
-  when (io.wpc) {
-      pc_r := io.npc
-  }
-
-  io.pc := pc_r
-}
-
-class PipePCTests(c : PipePC) extends Tester(c) {
-  poke(c.io.wpc, 0)
-  poke(c.io.npc, rnd.nextInt())
-  step(1)
-  expect(c.io.pc, 0)
-
-  for(i <- 0 to 10) {
-    val npc = rnd.nextInt()
-
-    poke(c.io.npc, npc)
-    poke(c.io.wpc, 1)
-    step(1)
-    expect(c.io.pc, npc)
-  }
-
-  reset()
-  expect(c.io.pc, 0)
-}
-
 class RegisterFilePorts extends Bundle {
   val addr_a = UInt(INPUT, 5)
   val data_a = Bits(OUTPUT, 32)
@@ -59,7 +24,7 @@ class RegisterFilePorts extends Bundle {
 class RegisterFile extends Module {
   val io = new RegisterFilePorts()
 
-  val regfile = Vec.fill(32) { Reg(Bits(width = 32)) }
+  val regfile = Vec.fill(32) { Reg(init = Bits(0, width = 32)) }
 
   when (io.wen && (io.addr_w != UInt(0))) {
     regfile(io.addr_w) := io.data_w
@@ -105,9 +70,6 @@ class PipeID extends Module {
     val pc4  = UInt(INPUT, 32)
 
     // wb input
-    // val wb_rf_wen   = Bool(INPUT)
-    // val wb_rf_addr  = UInt(INPUT, 5)
-    // val wb_rf_data  = UInt(INPUT, 32)
     val wb = new WB2IDSignals().flip()
 
     // output
@@ -530,7 +492,12 @@ class PipeWB extends Module {
   val io = new Bundle {
     val mem = new MEM2WBSignals().flip()
     val ctrl = new WB2IDSignals()
+
+    val inst = UInt(OUTPUT, 32)
   }
+
+  val reg_inst    = Reg(init = UInt(0), next = io.mem.inst)
+  io.inst := reg_inst
 
   io.ctrl.rf_wen := io.mem.rf_wen
   io.ctrl.rf_addr := io.mem.wb_dst
@@ -608,6 +575,15 @@ class PipeIFTests(c : PipeIF) extends Tester(c) {
   }
 }
 
+class DebugInfo extends Bundle {
+  val regs = Bits(OUTPUT, 32*32)
+  val if_inst = UInt(OUTPUT, 32)
+  val id_inst = UInt(OUTPUT, 32)
+  val exe_inst = UInt(OUTPUT, 32)
+  val mem_inst = UInt(OUTPUT, 32)
+  val wb_inst = UInt(OUTPUT, 32)
+}
+
 class CoreCPU extends Module {
   val io = new Bundle {
     val mem = new MEMSignals().flip()
@@ -615,7 +591,7 @@ class CoreCPU extends Module {
     val inst = UInt(INPUT, 32)
 
     // required debug info
-    val regs = Bits(OUTPUT, 32*32)
+    val debug = new DebugInfo()
   }
 
   val IF  = Module(new PipeIF ).io
@@ -623,6 +599,13 @@ class CoreCPU extends Module {
   val EXE = Module(new PipeEXE).io
   val MEM = Module(new PipeMEM).io
   val WB  = Module(new PipeWB ).io
+
+  io.debug.if_inst := IF.inst
+  io.debug.id_inst := ID.ctrl.inst
+  io.debug.exe_inst := EXE.ctrl.inst
+  io.debug.mem_inst := MEM.ctrl.inst
+  io.debug.wb_inst := WB.inst
+  io.debug.regs := ID.regs
 
   IF.pcsource := MEM.pcsource
   IF.bpc      := MEM.bpc
@@ -633,12 +616,6 @@ class CoreCPU extends Module {
 
   ID.pc4 := IF.pc
   ID.inst := IF.inst
-  io.regs := ID.regs
-
-  // io.mem.addr   := MEM.mem.addr
-  // io.mem.wen    := MEM.mem.wen
-  // io.mem.data_a := MEM.mem.data_a
-  // MEM.mem.data_b := io.mem.data_b
 
   io.mem <> MEM.mem
 

@@ -13,7 +13,8 @@ class Main extends Module {
   val io = new Bundle {
     val pc = UInt(OUTPUT, 32)
     val inst = UInt(INPUT, 32)
-    val regs = Bits(OUTPUT, 32*32)
+
+    val debug = new DebugInfo()
   }
 
   val cpu = Module(new CoreCPU()).io
@@ -23,7 +24,7 @@ class Main extends Module {
   io.pc := cpu.pc
   cpu.inst := io.inst
 
-  io.regs := cpu.regs
+  io.debug <> cpu.debug
 }
 
 class TopTests(c : Main) extends Tester(c) {
