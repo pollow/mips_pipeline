@@ -37,6 +37,33 @@ class RegisterFile extends Module {
 
 }
 
+class PipeIF extends Module {
+  val io = new Bundle {
+    val pcsource  = UInt(INPUT, width = pc_sel_len)
+    val bpc       = UInt(INPUT, width = 32)
+    val jpc       = UInt(INPUT, width = 32)
+
+    val imem      = UInt(INPUT, width = 32)
+    val inst      = UInt(OUTPUT, width = 32)
+    val pc        = UInt(OUTPUT, width = 32)
+  }
+
+  val next_pc = UInt(width = 32)
+  val pc_r = Reg(init = UInt(StartPC), next = next_pc)
+  val pc_plus_4 = pc_r + UInt(4)
+
+  next_pc := MuxLookup(io.pcsource, pc_plus_4, Array(
+    pc_plus4   -> pc_plus_4,
+    jump_pc    -> io.jpc,
+    branch_pc  -> io.bpc
+  ))
+
+  val inst_r = Reg(init = UInt(0), next = io.imem)
+
+  io.inst := inst_r
+  io.pc   := pc_r
+}
+
 class WB2IDSignals extends Bundle {
   val rf_wen   = Bool(OUTPUT)
   val rf_addr  = UInt(OUTPUT, 5)
@@ -208,60 +235,6 @@ class PipeID extends Module {
   io.ctrl.br_type := reg_br_type
 }
 
-class PipeIDTests(c : PipeID) extends Tester(c) {
-  // init
-  poke(c.io.inst, 0)
-  poke(c.io.pc4, 0)
-  poke(c.io.wb.rf_wen , 0)
-  poke(c.io.wb.rf_addr, 0)
-  poke(c.io.wb.rf_data, 0)
-  poke(c.io.rf_addr_t, 0)
-
-  // test regfile first
-
-  for( i <- 0 to 31) {
-    poke(c.io.wb.rf_wen , 1)
-    poke(c.io.wb.rf_addr, i)
-    poke(c.io.wb.rf_data, i * 100)
-    poke(c.io.rf_addr_t, i)
-
-    step(1)
-
-    expect(c.io.rf_data_t, i*100)
-  }
-
-  // test instruction signals
-  for((inst, pc) <- test_instructions.zipWithIndex) {
-
-    // split inst
-    poke(c.io.inst, inst)
-    poke(c.io.pc4, (pc + 1) * 4)
-
-    val opcode = c.io.inst(31, 26)
-    val rs     = c.io.inst(25, 21)
-    val rt     = c.io.inst(20, 16)
-    val rd     = c.io.inst(15, 11)
-    val sa     = c.io.inst(10,  6)
-    val func   = c.io.inst( 5,  0)
-    val imm    = c.io.inst(15,  0)
-    val addr   = c.io.inst(25,  0)
-    val sign   = c.io.inst(15)
-    val mf     = c.io.inst(25, 21)
-
-    // did not test regfile
-    poke(c.io.wb.rf_wen , 0)
-    poke(c.io.wb.rf_addr, 0)
-    poke(c.io.wb.rf_data, 0)
-
-    step(1)
-
-    expect(c.io.inst, inst)
-    expect(c.io.pc4, (pc + 1) * 4)
-  }
-
-  step(2)
-}
-
 class EXE2MEMSignals extends Bundle {
   val inst    = UInt(OUTPUT, 32)
   val alu_out = UInt(OUTPUT, 32)
@@ -342,67 +315,6 @@ class PipeEXE extends Module {
   io.ctrl.jpc     := reg_jpc
   io.ctrl.brt     := reg_exe_brt
   io.ctrl.br_type := reg_br_type
-}
-
-class IDandEXE extends Module {
-  val io = new Bundle {
-    // IF input
-    val inst = UInt(INPUT, 32)
-    val pc4  = UInt(INPUT, 32)
-
-    // wb input
-    val wb_rf_wen   = Bool(INPUT)
-    val wb_rf_addr  = UInt(INPUT, 5)
-    val wb_rf_data  = UInt(INPUT, 32)
-
-    // output
-    val exe_out = new EXE2MEMSignals()
-  }
-
-  val id = Module(new PipeID())
-  val exe = Module(new PipeEXE())
-
-  id.io.inst := io.inst
-  id.io.pc4  := io.pc4
-  id.io.wb.rf_wen   := io.wb_rf_wen
-  id.io.wb.rf_addr  := io.wb_rf_addr
-  id.io.wb.rf_data  := io.wb_rf_data
-  exe.io.id <> id.io.ctrl
-
-  io.exe_out := exe.io.ctrl
-}
-
-class PipeEXETests(c : IDandEXE) extends Tester(c) {
-  // init
-  poke(c.io.inst, 0)
-  poke(c.io.pc4, 0)
-  poke(c.io.wb_rf_wen , 0)
-  poke(c.io.wb_rf_addr, 0)
-  poke(c.io.wb_rf_data, 0)
-
-  for( i <- 0 to 31) {
-    poke(c.io.wb_rf_wen , 1)
-    poke(c.io.wb_rf_addr, i)
-    poke(c.io.wb_rf_data, i * 100)
-
-    step(1)
-  }
-
-  for((inst, pc) <- test_instructions.zipWithIndex) {
-
-    // split inst
-    poke(c.io.inst, inst)
-    poke(c.io.pc4, (pc + 1) * 4)
-
-    // do not test regfile
-    poke(c.io.wb_rf_wen , 0)
-    poke(c.io.wb_rf_addr, 0)
-    poke(c.io.wb_rf_data, 0)
-
-    step(1)
-
-  }
-  step(10)
 }
 
 class MEMSignals extends Bundle {
@@ -507,74 +419,6 @@ class PipeWB extends Module {
   ))
 }
 
-class PipeIF extends Module {
-  val io = new Bundle {
-    val pcsource  = UInt(INPUT, width = pc_sel_len)
-    val bpc       = UInt(INPUT, width = 32)
-    val jpc       = UInt(INPUT, width = 32)
-
-    val imem      = UInt(INPUT, width = 32)
-    val inst      = UInt(OUTPUT, width = 32)
-    val pc        = UInt(OUTPUT, width = 32)
-  }
-
-  val next_pc = UInt(width = 32)
-  val pc_r = Reg(init = UInt(StartPC), next = next_pc)
-  val pc_plus_4 = pc_r + UInt(4)
-
-  next_pc := MuxLookup(io.pcsource, pc_plus_4, Array(
-    pc_plus4   -> pc_plus_4,
-    jump_pc    -> io.jpc,
-    branch_pc  -> io.bpc
-  ))
-
-  val inst_r = Reg(init = UInt(0), next = io.imem)
-
-  io.inst := inst_r
-  io.pc   := pc_r
-}
-
-class PipeIFTests(c : PipeIF) extends Tester(c) {
-  poke(c.io.pcsource, 0)
-  poke(c.io.bpc, 0)
-  poke(c.io.jpc, 0)
-  poke(c.io.imem, 0)
-
-  // expect(c.io.pc, 0)
-  // expect(c.io.inst, 0)
-
-  for(i <- 0 to 10) {
-    val m = rnd.nextInt()
-    poke(c.io.pcsource, 0)
-    poke(c.io.imem, m)
-    step(1)
-    expect(c.io.pc, 4 * i + 4)
-    expect(c.io.inst, m)
-  }
-
-  for(i <- 0 to 10) {
-    val t = rnd.nextInt()
-    val m = rnd.nextInt()
-    poke(c.io.pcsource, 1)
-    poke(c.io.imem, m)
-    poke(c.io.bpc, t)
-    step(1)
-    expect(c.io.pc, t)
-    expect(c.io.inst, m)
-  }
-
-  for(i <- 0 to 10) {
-    val t = rnd.nextInt()
-    val m = rnd.nextInt()
-    poke(c.io.pcsource, 2)
-    poke(c.io.imem, m)
-    poke(c.io.jpc, t)
-    step(1)
-    expect(c.io.pc, t)
-    expect(c.io.inst, m)
-  }
-}
-
 class DebugInfo extends Bundle {
   val regs = Bits(OUTPUT, 32*32)
   val if_inst = UInt(OUTPUT, 32)
@@ -624,5 +468,161 @@ class CoreCPU extends Module {
   MEM.ctrl <> WB.mem
   ID.wb <> WB.ctrl
 
+}
+
+class PipeEXETests(c : IDandEXE) extends Tester(c) {
+  // init
+  poke(c.io.inst, 0)
+  poke(c.io.pc4, 0)
+  poke(c.io.wb_rf_wen , 0)
+  poke(c.io.wb_rf_addr, 0)
+  poke(c.io.wb_rf_data, 0)
+
+  for( i <- 0 to 31) {
+    poke(c.io.wb_rf_wen , 1)
+    poke(c.io.wb_rf_addr, i)
+    poke(c.io.wb_rf_data, i * 100)
+
+    step(1)
+  }
+
+  for((inst, pc) <- test_instructions.zipWithIndex) {
+
+    // split inst
+    poke(c.io.inst, inst)
+    poke(c.io.pc4, (pc + 1) * 4)
+
+    // do not test regfile
+    poke(c.io.wb_rf_wen , 0)
+    poke(c.io.wb_rf_addr, 0)
+    poke(c.io.wb_rf_data, 0)
+
+    step(1)
+
+  }
+  step(10)
+}
+
+class PipeIFTests(c : PipeIF) extends Tester(c) {
+  poke(c.io.pcsource, 0)
+  poke(c.io.bpc, 0)
+  poke(c.io.jpc, 0)
+  poke(c.io.imem, 0)
+
+  // expect(c.io.pc, 0)
+  // expect(c.io.inst, 0)
+
+  for(i <- 0 to 10) {
+    val m = rnd.nextInt()
+    poke(c.io.pcsource, 0)
+    poke(c.io.imem, m)
+    step(1)
+    expect(c.io.pc, 4 * i + 4)
+    expect(c.io.inst, m)
+  }
+
+  for(i <- 0 to 10) {
+    val t = rnd.nextInt()
+    val m = rnd.nextInt()
+    poke(c.io.pcsource, 1)
+    poke(c.io.imem, m)
+    poke(c.io.bpc, t)
+    step(1)
+    expect(c.io.pc, t)
+    expect(c.io.inst, m)
+  }
+
+  for(i <- 0 to 10) {
+    val t = rnd.nextInt()
+    val m = rnd.nextInt()
+    poke(c.io.pcsource, 2)
+    poke(c.io.imem, m)
+    poke(c.io.jpc, t)
+    step(1)
+    expect(c.io.pc, t)
+    expect(c.io.inst, m)
+  }
+}
+
+class PipeIDTests(c : PipeID) extends Tester(c) {
+  // init
+  poke(c.io.inst, 0)
+  poke(c.io.pc4, 0)
+  poke(c.io.wb.rf_wen , 0)
+  poke(c.io.wb.rf_addr, 0)
+  poke(c.io.wb.rf_data, 0)
+  poke(c.io.rf_addr_t, 0)
+
+  // test regfile first
+
+  for( i <- 0 to 31) {
+    poke(c.io.wb.rf_wen , 1)
+    poke(c.io.wb.rf_addr, i)
+    poke(c.io.wb.rf_data, i * 100)
+    poke(c.io.rf_addr_t, i)
+
+    step(1)
+
+    expect(c.io.rf_data_t, i*100)
+  }
+
+  // test instruction signals
+  for((inst, pc) <- test_instructions.zipWithIndex) {
+
+    // split inst
+    poke(c.io.inst, inst)
+    poke(c.io.pc4, (pc + 1) * 4)
+
+    val opcode = c.io.inst(31, 26)
+    val rs     = c.io.inst(25, 21)
+    val rt     = c.io.inst(20, 16)
+    val rd     = c.io.inst(15, 11)
+    val sa     = c.io.inst(10,  6)
+    val func   = c.io.inst( 5,  0)
+    val imm    = c.io.inst(15,  0)
+    val addr   = c.io.inst(25,  0)
+    val sign   = c.io.inst(15)
+    val mf     = c.io.inst(25, 21)
+
+    // did not test regfile
+    poke(c.io.wb.rf_wen , 0)
+    poke(c.io.wb.rf_addr, 0)
+    poke(c.io.wb.rf_data, 0)
+
+    step(1)
+
+    expect(c.io.inst, inst)
+    expect(c.io.pc4, (pc + 1) * 4)
+  }
+
+  step(2)
+}
+
+class IDandEXE extends Module {
+  val io = new Bundle {
+    // IF input
+    val inst = UInt(INPUT, 32)
+    val pc4  = UInt(INPUT, 32)
+
+    // wb input
+    val wb_rf_wen   = Bool(INPUT)
+    val wb_rf_addr  = UInt(INPUT, 5)
+    val wb_rf_data  = UInt(INPUT, 32)
+
+    // output
+    val exe_out = new EXE2MEMSignals()
+  }
+
+  val id = Module(new PipeID())
+  val exe = Module(new PipeEXE())
+
+  id.io.inst := io.inst
+  id.io.pc4  := io.pc4
+  id.io.wb.rf_wen   := io.wb_rf_wen
+  id.io.wb.rf_addr  := io.wb_rf_addr
+  id.io.wb.rf_data  := io.wb_rf_data
+  exe.io.id <> id.io.ctrl
+
+  io.exe_out := exe.io.ctrl
 }
 
