@@ -42,6 +42,7 @@ class PipeIF extends Module {
     val pcsource  = UInt(INPUT, width = pc_sel_len)
     val bpc       = UInt(INPUT, width = 32)
     val jpc       = UInt(INPUT, width = 32)
+    val stall     = Bool(INPUT)
 
     val imem      = UInt(INPUT, width = 32)
     val inst      = UInt(OUTPUT, width = 32)
@@ -49,7 +50,7 @@ class PipeIF extends Module {
   }
 
   val next_pc = UInt(width = 32)
-  val pc_r = Reg(init = UInt(StartPC), next = next_pc)
+  val pc_r = Reg(init = UInt(StartPC))
   val pc_plus_4 = pc_r + UInt(4)
 
   next_pc := MuxLookup(io.pcsource, pc_plus_4, Array(
@@ -58,10 +59,43 @@ class PipeIF extends Module {
     branch_pc  -> io.bpc
   ))
 
-  val inst_r = Reg(init = UInt(0), next = io.imem)
+  val inst_r = Reg(init = UInt(0))
+
+  when(io.stall) {
+    pc_r := pc_r
+    inst_r := inst_r
+  } . otherwise {
+    pc_r := next_pc
+    inst_r := io.imem
+  }
 
   io.inst := inst_r
   io.pc   := pc_r
+}
+
+class PipeStall extends Module {
+  val io = new Bundle{
+    val rs_id = UInt(INPUT, 5)
+    val rt_id = UInt(INPUT, 5)
+
+    val rd_mem = UInt(INPUT, 5)
+    val rd_exe = UInt(INPUT, 5)
+    val rd_wb = UInt(INPUT, 5)
+
+    val wreg_mem = Bool(INPUT)
+    val wreg_exe = Bool(INPUT)
+    val wreg_wb  = Bool(INPUT)
+
+    // val br_type_id  = UInt(INPUT, br_len)
+    val br_type_exe = UInt(INPUT, br_len)
+    val br_type_mem = UInt(INPUT, br_len)
+
+    val stall = Bool(OUTPUT)
+  }
+
+  io.stall := (io.wreg_mem & ((io.rs_id === io.rd_mem) | (io.rt_id === io.rd_mem))) |
+              (io.wreg_exe & ((io.rs_id === io.rd_exe) | (io.rt_id === io.rd_exe))) |
+              (io.wreg_wb  & ((io.rs_id === io.rd_wb) | (io.rt_id === io.rd_wb)))   //| (io.br_type_exe != br_n) | (io.br_type_mem != br_n)
 }
 
 class WB2IDSignals extends Bundle {
@@ -96,6 +130,12 @@ class PipeID extends Module {
     val inst = UInt(INPUT, 32)
     val pc4  = UInt(INPUT, 32)
 
+    // stall
+    val stall = Bool(INPUT)
+    val rs    = UInt(OUTPUT, 5)
+    val rt    = UInt(OUTPUT, 5)
+    // val br_type = UInt(OUTPUT, br_len)
+
     // wb input
     val wb = new WB2IDSignals().flip()
 
@@ -122,6 +162,10 @@ class PipeID extends Module {
   val sign   = io.inst(15)
   val mf     = io.inst(25, 21)
 
+  // stall
+  io.rt := rt
+  io.rs := rs
+
   // register file
   val regfile = Module(new RegisterFile()).io
 
@@ -137,7 +181,9 @@ class PipeID extends Module {
 
   io.regs := regfile.regs
 
-  val id_ctrl_signals =  ListLookup(io.inst,
+  val inst = Mux(io.stall, UInt(0), io.inst)
+
+  val id_ctrl_signals =  ListLookup(inst,
   // valid, branch, da, db, ext, op1, op2, ALU_op, wb_sel, reg_wb, rf_w, mem_ren, mem_wen
     List(N, br_n, da_x, db_x, xext, op1_x, op2_x, alu_x, wb_x, reg_x, N, N, N),
     Array(
@@ -173,6 +219,8 @@ class PipeID extends Module {
     ))
 
   val (valid_signal : Bool) :: br_type :: data_a_sel :: data_b_sel :: extend_type :: op1_sel :: op2_sel :: alu_op :: wb_sel :: reg_dst :: (rf_wen : Bool) :: (mem_ren : Bool) :: (mem_wen : Bool) :: Nil = id_ctrl_signals
+
+  // io.br_type := br_type
 
   val id_data_a = MuxLookup(data_a_sel, da_a, Array(
     da_a -> regfile.data_a
@@ -254,7 +302,15 @@ class PipeEXE extends Module {
   val io = new Bundle {
     val id = new ID2EXESignals().flip()
     val ctrl = new EXE2MEMSignals()
+
+    // stall
+    val rd = UInt(OUTPUT, width = 5)
+    val wreg = Bool(OUTPUT)
   }
+
+  io.wreg := io.id.rf_wen
+
+  io.rd := io.id.wb_dst// io.id.inst(15, 11)
 
   val op1 = MuxLookup(io.id.op1_sel, UInt(0), Array(
     op1_a -> io.id.data_a
@@ -357,8 +413,13 @@ class PipeMEM extends Module {
     val pcsource = UInt(OUTPUT, pc_sel_len)
     val bpc      = UInt(OUTPUT, 32)
     val jpc      = UInt(OUTPUT, 32)
+    // stall
+    val rd       = UInt(OUTPUT, width = 5)
+    val wreg     = Bool(OUTPUT)
+
   }
 
+  io.wreg := io.exe.rf_wen
   // Branch Taken
   when (io.exe.brt) {
     io.pcsource := MuxLookup(io.exe.br_type, default = pc_plus4, Array(
@@ -372,6 +433,7 @@ class PipeMEM extends Module {
   }
   io.bpc := io.exe.bpc
   io.jpc := io.exe.jpc
+  io.rd := io.exe.wb_dst// io.exe.inst(15, 11)
 
   // Mem operation
   io.mem.wen    := io.exe.mem_wen
@@ -406,10 +468,17 @@ class PipeWB extends Module {
     val ctrl = new WB2IDSignals()
 
     val inst = UInt(OUTPUT, 32)
+    // stall
+    val rd  = UInt(OUTPUT, width = 5)
+    val wreg = Bool(OUTPUT)
   }
+
+  io.wreg := io.mem.rf_wen
 
   val reg_inst    = Reg(init = UInt(0), next = io.mem.inst)
   io.inst := reg_inst
+
+  io.rd := io.mem.wb_dst// io.mem.inst(15, 11)
 
   io.ctrl.rf_wen := io.mem.rf_wen
   io.ctrl.rf_addr := io.mem.wb_dst
@@ -443,6 +512,7 @@ class CoreCPU extends Module {
   val EXE = Module(new PipeEXE).io
   val MEM = Module(new PipeMEM).io
   val WB  = Module(new PipeWB ).io
+  val Stall = Module(new PipeStall).io
 
   io.debug.if_inst := IF.inst
   io.debug.id_inst := ID.ctrl.inst
@@ -468,6 +538,21 @@ class CoreCPU extends Module {
   MEM.ctrl <> WB.mem
   ID.wb <> WB.ctrl
 
+  // stall
+  Stall.rt_id := ID.rt
+  Stall.rs_id := ID.rs
+  Stall.rd_exe := EXE.rd
+  Stall.rd_mem := MEM.rd
+  Stall.rd_wb  := WB.rd
+  Stall.wreg_exe := EXE.wreg
+  Stall.wreg_mem := MEM.wreg
+  Stall.wreg_wb := WB.wreg
+  Stall.br_type_exe := EXE.id.br_type
+  // Stall.br_type_id  := ID.br_type
+  Stall.br_type_mem := MEM.exe.br_type
+
+  IF.stall := Stall.stall
+  ID.stall := Stall.stall
 }
 
 class PipeEXETests(c : IDandEXE) extends Tester(c) {
