@@ -31,7 +31,7 @@ class TopTests(c : Main) extends Tester(c) {
   poke(c.io.inst, 0)
   step(2)
   reset(1)
-  for(i <- 0 to 40) {
+  for(i <- 0 to 60) {
     val pc = peek(c.io.pc).toInt >> 2
     poke(c.io.inst, if (pc < test_instructions.length) test_instructions(pc) else 0)
     step(1)
