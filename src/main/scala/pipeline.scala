@@ -42,7 +42,9 @@ class PipeIF extends Module {
     val pcsource  = UInt(INPUT, width = pc_sel_len)
     val bpc       = UInt(INPUT, width = 32)
     val jpc       = UInt(INPUT, width = 32)
+
     val stall     = Bool(INPUT)
+    val brt       = Bool(INPUT)
 
     val imem      = UInt(INPUT, width = 32)
     val inst      = UInt(OUTPUT, width = 32)
@@ -63,13 +65,13 @@ class PipeIF extends Module {
 
   when(io.stall) {
     pc_r := pc_r
-    inst_r := inst_r
+    inst_r := inst_r // or will lost an inst for data hazard
   } . otherwise {
     pc_r := next_pc
     inst_r := io.imem
   }
 
-  io.inst := inst_r
+  io.inst := Mux(io.brt, UInt(0), inst_r)
   io.pc   := pc_r
 }
 
@@ -116,6 +118,8 @@ class ID2EXESignals extends Bundle {
   val rf_wen = Bool(OUTPUT)
   val mem_ren = Bool(OUTPUT)
   val mem_wen = Bool(OUTPUT)
+
+  val brt = Bool(OUTPUT)
 }
 
 class PipeID extends Module {
@@ -147,6 +151,7 @@ class PipeID extends Module {
     val regs     = Bits(OUTPUT, 32*32)
   }
 
+  val inst      = Mux(io.stall, UInt(0), io.inst)
   // split inst
   val opcode = io.inst(31, 26)
   val rs     = io.inst(25, 21)
@@ -174,7 +179,6 @@ class PipeID extends Module {
 
   io.regs := regfile.regs
 
-  val inst = Mux(io.stall, UInt(0), io.inst)
   // stall
   io.rt := io.inst(20, 16)
   io.rs := io.inst(25, 21)
@@ -263,7 +267,8 @@ class PipeID extends Module {
   io.bpc := io.pc4 + (sign_imm << UInt(2))
   io.jpc := Cat(io.pc4(31, 28), addr, Fill(2, UInt(0)))
 
-  val reg_inst    = Reg(init = UInt(0), next = inst)
+  val reg_inst  = Reg(init = UInt(0), next = inst)
+  val reg_brt     = Reg(init = Bool(false), next = brt)
   val reg_shamt   = Reg(init = UInt(0), next = sa)
   val reg_br_type = Reg(init = br_n, next = br_type)
   val reg_wb_dst  = Reg(init = UInt(0), next = id_wb_addr)
@@ -275,10 +280,11 @@ class PipeID extends Module {
   val reg_op1_sel = Reg(init = op1_x, next = op1_sel)
   val reg_op2_sel = Reg(init = op2_x, next = op2_sel)
   val reg_wb_sel  = Reg(init = wb_x,  next = wb_sel)
-  val reg_rf_wen  = Reg(init = N, next = rf_wen) // Mux(io.stall, Bool(false), rf_wen))
+  val reg_rf_wen  = Reg(init = N, next = rf_wen)
   val reg_mem_ren = Reg(init = N, next = mem_ren)
-  val reg_mem_wen = Reg(init = N, next = mem_wen)// Mux(io.stall, Bool(false), mem_wen))
+  val reg_mem_wen = Reg(init = N, next = mem_wen)
 
+  io.ctrl.brt     := reg_brt
   io.ctrl.inst    := reg_inst
   io.ctrl.data_a  := reg_data_a
   io.ctrl.data_b  := reg_data_b
@@ -498,6 +504,7 @@ class CoreCPU extends Module {
   IF.pcsource := ID.pcsource
   IF.bpc      := ID.bpc
   IF.jpc      := ID.jpc
+  IF.brt      := ID.ctrl.brt
 
   io.pc := IF.pc
   IF.imem := io.inst
