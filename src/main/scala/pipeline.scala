@@ -31,8 +31,8 @@ class RegisterFile extends Module {
   }
 
   io.regs := regfile.toBits()
-  io.data_a := regfile(io.addr_a)
-  io.data_b := regfile(io.addr_b)
+  io.data_a := Mux(io.addr_a === io.addr_w, io.data_w, regfile(io.addr_a))
+  io.data_b := Mux(io.addr_b === io.addr_w, io.data_w, regfile(io.addr_b))
   io.data_t := regfile(io.addr_t)
 
 }
@@ -88,12 +88,14 @@ class PipeStall extends Module {
     val wreg_exe = Bool(INPUT)
     val wreg_wb  = Bool(INPUT)
 
+    val exe_mem_ren = Bool(INPUT)
+
     val stall = Bool(OUTPUT)
   }
 
-  io.stall := (io.wreg_mem & ((io.rs_id === io.rd_mem) | (io.rt_id === io.rd_mem)) & (io.rd_mem != UInt(0))) |
-              (io.wreg_exe & ((io.rs_id === io.rd_exe) | (io.rt_id === io.rd_exe)) & (io.rd_exe != UInt(0))) |
-              (io.wreg_wb  & ((io.rs_id === io.rd_wb)  | (io.rt_id === io.rd_wb))  & (io.rd_wb  != UInt(0)))
+  io.stall := (io.exe_mem_ren & ((io.rs_id === io.rd_exe) | (io.rt_id === io.rd_exe)) & (io.rd_exe != UInt(0)))
+              // (io.wreg_mem & ((io.rs_id === io.rd_mem) | (io.rt_id === io.rd_mem)) & (io.rd_mem != UInt(0))) |
+              // (io.wreg_wb  & ((io.rs_id === io.rd_wb)  | (io.rt_id === io.rd_wb))  & (io.rd_wb  != UInt(0)))
 }
 
 class WB2IDSignals extends Bundle {
@@ -153,6 +155,11 @@ class PipeID extends Module {
 
     // required debug info
     val regs     = Bits(OUTPUT, 32*32)
+
+    // forward
+    val exe_out = UInt(INPUT, 32)
+    val mem_out = UInt(INPUT, 32)
+    val mem_dst = UInt(INPUT, 5)
   }
 
   val inst      = Mux(io.stall, UInt(0), io.inst)
@@ -213,7 +220,7 @@ class PipeID extends Module {
       XORI_ -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_xor, wb_alu, reg_rt, Y, N, N),
 
       LW_   -> List(Y, br_n,  da_a, db_x, sext, op1_a, op2_imm, alu_add, wb_mem, reg_rt, Y, Y, N),
-      SW_   -> List(Y, br_n,  da_a, db_x, sext, op1_a, op2_imm, alu_add, wb_mem, reg_rt, N, N, Y),
+      SW_   -> List(Y, br_n,  da_a, db_b, sext, op1_a, op2_imm, alu_add, wb_mem, reg_rt, N, N, Y),
 
       BEQ_  -> List(Y, br_eq, da_a, db_b, sext, op1_x, op2_imm, alu_add, wb_alu, reg_rt, N, N, N),
       BNE_  -> List(Y, br_ne, da_a, db_b, sext, op1_x, op2_imm, alu_and, wb_alu, reg_rt, N, N, N),
@@ -246,8 +253,31 @@ class PipeID extends Module {
     reg_rd -> rd
   ))
 
+  val reg_wb_dst  = Reg(init = UInt(0), next = id_wb_addr)
+
+  val op1 = UInt()
+  op1 := id_data_a
+  when (rs != UInt(0)) {
+    when (rs === reg_wb_dst) {
+      op1 := io.exe_out
+    } .elsewhen (rs === io.mem_dst) {
+      op1 := io.mem_out
+    }
+  }
+
+  val op2 = UInt()
+  op2 := id_data_b
+  when (rt != UInt(0)) {
+    when (rt === reg_wb_dst) {
+      op2 := io.exe_out
+    } .elsewhen (rt === io.mem_dst) {
+      op2 := io.mem_out
+    }
+  }
+
+
   // Branch Taken
-  val equ = id_data_a === id_data_b
+  val equ = op1 === op2
 
   val brt = MuxLookup(br_type, Bool(false), Array(
     br_n  -> Bool(false),
@@ -271,13 +301,12 @@ class PipeID extends Module {
   io.bpc := io.pc4 + (sign_imm << UInt(2))
   io.jpc := Cat(io.pc4(31, 28), addr, Fill(2, UInt(0)))
 
-  val reg_inst  = Reg(init = UInt(0), next = inst)
+  val reg_inst    = Reg(init = UInt(0), next = inst)
   val reg_brt     = Reg(init = Bool(false), next = brt)
   val reg_shamt   = Reg(init = UInt(0), next = sa)
   val reg_br_type = Reg(init = br_n, next = br_type)
-  val reg_wb_dst  = Reg(init = UInt(0), next = id_wb_addr)
-  val reg_data_a  = Reg(init = UInt(0), next = id_data_a)
-  val reg_data_b  = Reg(init = UInt(0), next = id_data_b)
+  val reg_data_a  = Reg(init = UInt(0), next = op1)
+  val reg_data_b  = Reg(init = UInt(0), next = op2)
   val reg_imm     = Reg(init = UInt(0), next = id_ext_imm)
   val reg_pc4     = Reg(init = UInt(0), next = io.pc4)
   val reg_alu_op  = Reg(init = alu_x, next = alu_op)
@@ -287,8 +316,8 @@ class PipeID extends Module {
   val reg_rf_wen  = Reg(init = N, next = rf_wen)
   val reg_mem_ren = Reg(init = N, next = mem_ren)
   val reg_mem_wen = Reg(init = N, next = mem_wen)
-  val reg_irs      = Reg(init = UInt(0), next = rs)
-  val reg_irt      = Reg(init = UInt(0), next = rt)
+  val reg_irs      = Reg(init = UInt(0), next = Mux(io.stall, UInt(0), rs))
+  val reg_irt      = Reg(init = UInt(0), next = Mux(io.stall, UInt(0), rt))
 
   io.ctrl.rs      := reg_irs
   io.ctrl.rt      := reg_irt
@@ -331,19 +360,19 @@ class PipeEXE extends Module {
     val wreg = Bool(OUTPUT)
 
     // forward
-    val mem_dst = UInt(INPUT, 5)
-    val mem_out = UInt(INPUT, 32)
+    // val mem_dst = UInt(INPUT, 5)
+    val exe_out = UInt(OUTPUT, 32)
   }
 
   // Stall
   io.wreg := io.id.rf_wen
   io.rd := io.id.wb_dst
 
-  val op1_t = MuxLookup(io.id.op1_sel, UInt(0), Array(
+  val op1= MuxLookup(io.id.op1_sel, UInt(0), Array(
     op1_a -> io.id.data_a
   ))
 
-  val op2_t = MuxLookup(io.id.op2_sel, UInt(0), Array(
+  val op2 = MuxLookup(io.id.op2_sel, UInt(0), Array(
     op2_b -> io.id.data_b,
     op2_imm -> io.id.imm
   ))
@@ -352,21 +381,7 @@ class PipeEXE extends Module {
   val reg_wb_dst   = Reg(init = UInt(0),     next = io.id.wb_dst)
   val reg_exec_out = Reg(init = UInt(0),     next = exec_alu_out)
 
-  val op1 = UInt()
-  op1 := op1_t
-  when (io.id.rs === reg_wb_dst) {
-    op1 := reg_exec_out
-  } .elsewhen (io.id.rs === io.mem_dst) {
-    op1 := io.mem_out
-  }
-
-  val op2 = UInt()
-  op2 := op2_t
-  when (io.id.rt === reg_wb_dst) {
-    op2 := reg_exec_out
-  } .elsewhen (io.id.rt === io.mem_dst) {
-    op2 := io.mem_out
-  }
+  io.exe_out := exec_alu_out
 
   exec_alu_out := MuxLookup(io.id.alu_op, UInt(0), Array(
     alu_add -> (op1 + op2)(31, 0),
@@ -421,7 +436,7 @@ class MEM2WBSignals extends Bundle {
 class Memory extends Module {
   val io = new MEMSignals()
 
-  val memory = Mem(UInt(width = 32), 32, true)
+  val memory = Vec.fill(32) { Reg(init = Bits(0, width = 32)) }
 
   when (io.wen) {
     memory(io.addr) := io.data_a
@@ -442,7 +457,6 @@ class PipeMEM extends Module {
     // forward
     val mem_out = UInt(OUTPUT, width = 32)
     val mem_dst = UInt(OUTPUT, width = 5)
-
   }
 
   io.wreg := io.exe.rf_wen
@@ -450,16 +464,18 @@ class PipeMEM extends Module {
 
   // Mem operation
   io.mem.wen    := io.exe.mem_wen
-  io.mem.addr   := io.exe.alu_out
+  io.mem.addr   := (io.exe.alu_out >> UInt(2))
   io.mem.data_a := io.exe.data_b
 
-  val mem_rdata = Mux(io.exe.mem_wen, io.exe.data_b, io.mem.data_b)
-
+  val mem_out =  MuxLookup(io.exe.wb_sel, UInt(0), Array(
+    wb_alu -> io.exe.alu_out,
+    wb_mem -> Mux(io.exe.mem_wen, io.exe.data_b, io.mem.data_b)
+  ))
   // reg buffer
   val reg_mem_ren = Reg(init = UInt(0), next = io.exe.mem_ren)
   val reg_rf_wen  = Reg(init = UInt(0), next = io.exe.rf_wen)
-  val reg_mem_rd  = Reg(init = UInt(0), next = mem_rdata)
-  val reg_alu_out = Reg(init = UInt(0), next = io.exe.alu_out)
+  val reg_mem_out = Reg(init = UInt(0), next = mem_out)
+  // val reg_alu_out = Reg(init = UInt(0), next = io.exe.alu_out)
   val reg_wb_sel  = Reg(init = UInt(0), next = io.exe.wb_sel)
   val reg_wb_dst  = Reg(init = UInt(0), next = io.exe.wb_dst)
   val reg_inst    = Reg(init = UInt(0), next = io.exe.inst)
@@ -467,16 +483,16 @@ class PipeMEM extends Module {
   // output
 
   io.ctrl.inst  := reg_inst
-  io.ctrl.alu_out := reg_alu_out
-  io.ctrl.mem_data := reg_mem_rd
+  // io.ctrl.alu_out := reg_alu_out
+  io.ctrl.mem_data := reg_mem_out
   io.ctrl.mem_ren := reg_mem_ren
   io.ctrl.wb_dst := reg_wb_dst
   io.ctrl.wb_sel := reg_wb_sel
   io.ctrl.rf_wen := reg_rf_wen
 
   // forward
-  io.mem_out := reg_mem_rd
-  io.mem_dst := reg_wb_dst
+  io.mem_out := mem_out // reg_mem_rd
+  io.mem_dst := io.exe.wb_dst // reg_wb_dst
 }
 
 class PipeWB extends Module {
@@ -490,19 +506,16 @@ class PipeWB extends Module {
     val wreg = Bool(OUTPUT)
   }
 
-  io.wreg := io.mem.rf_wen
-
   val reg_inst    = Reg(init = UInt(0), next = io.mem.inst)
+
+  io.wreg := io.mem.rf_wen
   io.inst := reg_inst
 
-  io.rd := io.mem.wb_dst// io.mem.inst(15, 11)
+  io.rd := io.mem.wb_dst
 
   io.ctrl.rf_wen := io.mem.rf_wen
   io.ctrl.rf_addr := io.mem.wb_dst
-  io.ctrl.rf_data := MuxLookup(io.mem.wb_sel, UInt(0), Array(
-    wb_alu -> io.mem.alu_out,
-    wb_mem -> io.mem.mem_data
-  ))
+  io.ctrl.rf_data := io.mem.mem_data
 }
 
 class DebugInfo extends Bundle {
@@ -566,11 +579,15 @@ class CoreCPU extends Module {
   Stall.wreg_mem := MEM.wreg
   Stall.wreg_wb := WB.wreg
 
+  Stall.exe_mem_ren := EXE.id.mem_ren
+
   IF.stall := Stall.stall
   ID.stall := Stall.stall
 
   // forward
-  EXE.mem_dst := MEM.mem_dst
-  EXE.mem_out := MEM.mem_out
+  ID.mem_dst := MEM.mem_dst
+  ID.mem_out := MEM.mem_out
+  ID.exe_out := EXE.exe_out
+
 }
 

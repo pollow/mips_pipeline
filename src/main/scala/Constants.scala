@@ -78,11 +78,11 @@ trait ControlSignal {
   val db_x  = UInt(0, db_size)
 
   // write back register selection
-  val reg_size = 3
+  val reg_size = 4
   val reg_len = log2(reg_size)
-  val reg_rt = UInt(0, reg_size)
-  val reg_rd = UInt(1, reg_size)
-  val reg_ra = UInt(2, reg_size)
+  val reg_rt = UInt(1, reg_size)
+  val reg_rd = UInt(2, reg_size)
+  val reg_ra = UInt(3, reg_size)
   val reg_x  = UInt(0, reg_size)
 
   // operand 1 selection
@@ -128,27 +128,35 @@ with ALUOpConstants
 with ControlSignal
 {
   val test_instructions = List(
-    0x20100005,
-    0x30110000,
-    0x36310003,
-    0x02119020,
-    0x02119822,
-    0x0211a024,
-    0x0211a825,
-    0x00108082,
-    0x001087c0,
-    0x001087c3,
-    0xac120000,
-    0x8c130000,
-    0x2252ffff,
-    0x12530002,
-    0x22520001,
-    0x0800000d,
-    0x16530002,
-    0x2272ffff,
-    0x08000010,
-    0x08000013
-
+    0x20010001,
+    0x00211020,
+    0x00011825,
+    0x00612024,
+    0x10640002,
+    0x2001ffff,
+    0x08000000,
+    0xac020000,
+    0x8c010000,
+    0x00211020,
+    0x00011825,
+    0x00212024,
+    0xac040008,
+    0x8c030000,
+    0x00612020,
+    0x2081fffd,
+    0x20210002,
+    0x8c010000,
+    0x20420001,
+    0x1461000a,
+    0x8c040000,
+    0x1464000a,
+    0x8c050000,
+    0xac050004,
+    0x8c040004,
+    0xac820006,
+    0x8c810006,
+    0x08000000,
+    0x00000000
   )
 
 }
