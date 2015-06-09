@@ -120,6 +120,10 @@ class ID2EXESignals extends Bundle {
   val mem_wen = Bool(OUTPUT)
 
   val brt = Bool(OUTPUT)
+
+  // forward
+  val rs = UInt(OUTPUT, 5)
+  val rt = UInt(OUTPUT, 5)
 }
 
 class PipeID extends Module {
@@ -283,7 +287,11 @@ class PipeID extends Module {
   val reg_rf_wen  = Reg(init = N, next = rf_wen)
   val reg_mem_ren = Reg(init = N, next = mem_ren)
   val reg_mem_wen = Reg(init = N, next = mem_wen)
+  val reg_irs      = Reg(init = UInt(0), next = rs)
+  val reg_irt      = Reg(init = UInt(0), next = rt)
 
+  io.ctrl.rs      := reg_irs
+  io.ctrl.rt      := reg_irt
   io.ctrl.brt     := reg_brt
   io.ctrl.inst    := reg_inst
   io.ctrl.data_a  := reg_data_a
@@ -321,22 +329,46 @@ class PipeEXE extends Module {
     // stall
     val rd = UInt(OUTPUT, width = 5)
     val wreg = Bool(OUTPUT)
+
+    // forward
+    val mem_dst = UInt(INPUT, 5)
+    val mem_out = UInt(INPUT, 32)
   }
 
   // Stall
   io.wreg := io.id.rf_wen
   io.rd := io.id.wb_dst
 
-  val op1 = MuxLookup(io.id.op1_sel, UInt(0), Array(
+  val op1_t = MuxLookup(io.id.op1_sel, UInt(0), Array(
     op1_a -> io.id.data_a
   ))
 
-  val op2 = MuxLookup(io.id.op2_sel, UInt(0), Array(
+  val op2_t = MuxLookup(io.id.op2_sel, UInt(0), Array(
     op2_b -> io.id.data_b,
     op2_imm -> io.id.imm
   ))
 
-  val exec_alu_out = MuxLookup(io.id.alu_op, UInt(0), Array(
+  val exec_alu_out = UInt()
+  val reg_wb_dst   = Reg(init = UInt(0),     next = io.id.wb_dst)
+  val reg_exec_out = Reg(init = UInt(0),     next = exec_alu_out)
+
+  val op1 = UInt()
+  op1 := op1_t
+  when (io.id.rs === reg_wb_dst) {
+    op1 := reg_exec_out
+  } .elsewhen (io.id.rs === io.mem_dst) {
+    op1 := io.mem_out
+  }
+
+  val op2 = UInt()
+  op2 := op2_t
+  when (io.id.rt === reg_wb_dst) {
+    op2 := reg_exec_out
+  } .elsewhen (io.id.rt === io.mem_dst) {
+    op2 := io.mem_out
+  }
+
+  exec_alu_out := MuxLookup(io.id.alu_op, UInt(0), Array(
     alu_add -> (op1 + op2)(31, 0),
     alu_sub -> (op1 - op2),
     alu_and -> (op1 & op2),
@@ -351,13 +383,11 @@ class PipeEXE extends Module {
 
   // TODO JAL support
 
-  val reg_exec_out = Reg(init = UInt(0),     next = exec_alu_out)
   val reg_data_b   = Reg(init = UInt(0),     next = io.id.data_b)
   val reg_rf_wen   = Reg(init = UInt(0),     next = io.id.rf_wen)
   val reg_mem_ren  = Reg(init = UInt(0),     next = io.id.mem_ren)
   val reg_mem_wen  = Reg(init = UInt(0),     next = io.id.mem_wen)
   val reg_wb_sel   = Reg(init = UInt(0),     next = io.id.wb_sel)
-  val reg_wb_dst   = Reg(init = UInt(0),     next = io.id.wb_dst)
   val reg_inst     = Reg(init = UInt(0),     next = io.id.inst)
 
   io.ctrl.inst    := reg_inst
@@ -409,6 +439,9 @@ class PipeMEM extends Module {
     // stall
     val rd       = UInt(OUTPUT, width = 5)
     val wreg     = Bool(OUTPUT)
+    // forward
+    val mem_out = UInt(OUTPUT, width = 32)
+    val mem_dst = UInt(OUTPUT, width = 5)
 
   }
 
@@ -420,7 +453,7 @@ class PipeMEM extends Module {
   io.mem.addr   := io.exe.alu_out
   io.mem.data_a := io.exe.data_b
 
-  val mem_rdata = io.mem.data_b
+  val mem_rdata = Mux(io.exe.mem_wen, io.exe.data_b, io.mem.data_b)
 
   // reg buffer
   val reg_mem_ren = Reg(init = UInt(0), next = io.exe.mem_ren)
@@ -440,6 +473,10 @@ class PipeMEM extends Module {
   io.ctrl.wb_dst := reg_wb_dst
   io.ctrl.wb_sel := reg_wb_sel
   io.ctrl.rf_wen := reg_rf_wen
+
+  // forward
+  io.mem_out := reg_mem_rd
+  io.mem_dst := reg_wb_dst
 }
 
 class PipeWB extends Module {
@@ -531,161 +568,9 @@ class CoreCPU extends Module {
 
   IF.stall := Stall.stall
   ID.stall := Stall.stall
-}
 
-class PipeEXETests(c : IDandEXE) extends Tester(c) {
-  // init
-  poke(c.io.inst, 0)
-  poke(c.io.pc4, 0)
-  poke(c.io.wb_rf_wen , 0)
-  poke(c.io.wb_rf_addr, 0)
-  poke(c.io.wb_rf_data, 0)
-
-  for( i <- 0 to 31) {
-    poke(c.io.wb_rf_wen , 1)
-    poke(c.io.wb_rf_addr, i)
-    poke(c.io.wb_rf_data, i * 100)
-
-    step(1)
-  }
-
-  for((inst, pc) <- test_instructions.zipWithIndex) {
-
-    // split inst
-    poke(c.io.inst, inst)
-    poke(c.io.pc4, (pc + 1) * 4)
-
-    // do not test regfile
-    poke(c.io.wb_rf_wen , 0)
-    poke(c.io.wb_rf_addr, 0)
-    poke(c.io.wb_rf_data, 0)
-
-    step(1)
-
-  }
-  step(10)
-}
-
-class PipeIFTests(c : PipeIF) extends Tester(c) {
-  poke(c.io.pcsource, 0)
-  poke(c.io.bpc, 0)
-  poke(c.io.jpc, 0)
-  poke(c.io.imem, 0)
-
-  // expect(c.io.pc, 0)
-  // expect(c.io.inst, 0)
-
-  for(i <- 0 to 10) {
-    val m = rnd.nextInt()
-    poke(c.io.pcsource, 0)
-    poke(c.io.imem, m)
-    step(1)
-    expect(c.io.pc, 4 * i + 4)
-    expect(c.io.inst, m)
-  }
-
-  for(i <- 0 to 10) {
-    val t = rnd.nextInt()
-    val m = rnd.nextInt()
-    poke(c.io.pcsource, 1)
-    poke(c.io.imem, m)
-    poke(c.io.bpc, t)
-    step(1)
-    expect(c.io.pc, t)
-    expect(c.io.inst, m)
-  }
-
-  for(i <- 0 to 10) {
-    val t = rnd.nextInt()
-    val m = rnd.nextInt()
-    poke(c.io.pcsource, 2)
-    poke(c.io.imem, m)
-    poke(c.io.jpc, t)
-    step(1)
-    expect(c.io.pc, t)
-    expect(c.io.inst, m)
-  }
-}
-
-class PipeIDTests(c : PipeID) extends Tester(c) {
-  // init
-  poke(c.io.inst, 0)
-  poke(c.io.pc4, 0)
-  poke(c.io.wb.rf_wen , 0)
-  poke(c.io.wb.rf_addr, 0)
-  poke(c.io.wb.rf_data, 0)
-  poke(c.io.rf_addr_t, 0)
-
-  // test regfile first
-
-  for( i <- 0 to 31) {
-    poke(c.io.wb.rf_wen , 1)
-    poke(c.io.wb.rf_addr, i)
-    poke(c.io.wb.rf_data, i * 100)
-    poke(c.io.rf_addr_t, i)
-
-    step(1)
-
-    expect(c.io.rf_data_t, i*100)
-  }
-
-  // test instruction signals
-  for((inst, pc) <- test_instructions.zipWithIndex) {
-
-    // split inst
-    poke(c.io.inst, inst)
-    poke(c.io.pc4, (pc + 1) * 4)
-
-    val opcode = c.io.inst(31, 26)
-    val rs     = c.io.inst(25, 21)
-    val rt     = c.io.inst(20, 16)
-    val rd     = c.io.inst(15, 11)
-    val sa     = c.io.inst(10,  6)
-    val func   = c.io.inst( 5,  0)
-    val imm    = c.io.inst(15,  0)
-    val addr   = c.io.inst(25,  0)
-    val sign   = c.io.inst(15)
-    val mf     = c.io.inst(25, 21)
-
-    // did not test regfile
-    poke(c.io.wb.rf_wen , 0)
-    poke(c.io.wb.rf_addr, 0)
-    poke(c.io.wb.rf_data, 0)
-
-    step(1)
-
-    expect(c.io.inst, inst)
-    expect(c.io.pc4, (pc + 1) * 4)
-  }
-
-  step(2)
-}
-
-class IDandEXE extends Module {
-  val io = new Bundle {
-    // IF input
-    val inst = UInt(INPUT, 32)
-    val pc4  = UInt(INPUT, 32)
-
-    // wb input
-    val wb_rf_wen   = Bool(INPUT)
-    val wb_rf_addr  = UInt(INPUT, 5)
-    val wb_rf_data  = UInt(INPUT, 32)
-
-    // output
-    val exe_out = new EXE2MEMSignals()
-  }
-
-  val id = Module(new PipeID())
-  val exe = Module(new PipeEXE())
-
-  id.io.inst := io.inst
-  id.io.pc4  := io.pc4
-  id.io.wb.rf_wen   := io.wb_rf_wen
-  id.io.wb.rf_addr  := io.wb_rf_addr
-  id.io.wb.rf_data  := io.wb_rf_data
-  exe.io.id <> id.io.ctrl
-
-  io.exe_out := exe.io.ctrl
+  // forward
+  EXE.mem_dst := MEM.mem_dst
+  EXE.mem_out := MEM.mem_out
 }
 
