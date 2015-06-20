@@ -90,10 +90,12 @@ class PipeStall extends Module {
 
     val exe_mem_ren = Bool(INPUT)
 
+    val inst = UInt(INPUT, 32)
+
     val stall = Bool(OUTPUT)
   }
 
-  io.stall := (io.exe_mem_ren & ((io.rs_id === io.rd_exe) | (io.rt_id === io.rd_exe)) & (io.rd_exe != UInt(0)))
+  io.stall := (io.inst != SW_) & (io.exe_mem_ren & ((io.rs_id === io.rd_exe) | (io.rt_id === io.rd_exe)) & (io.rd_exe != UInt(0)))
               // (io.wreg_mem & ((io.rs_id === io.rd_mem) | (io.rt_id === io.rd_mem)) & (io.rd_mem != UInt(0))) |
               // (io.wreg_wb  & ((io.rs_id === io.rd_wb)  | (io.rt_id === io.rd_wb))  & (io.rd_wb  != UInt(0)))
 }
@@ -162,6 +164,7 @@ class PipeID extends Module {
     val mem_dst = UInt(INPUT, 5)
   }
 
+  // val inst      = Mux(io.stall & (io.inst != SW_), UInt(0), io.inst)
   val inst      = Mux(io.stall, UInt(0), io.inst)
   // split inst
   val opcode = io.inst(31, 26)
@@ -344,6 +347,8 @@ class EXE2MEMSignals extends Bundle {
   val alu_out = UInt(OUTPUT, 32)
   val data_b  = UInt(OUTPUT, 32)
   val wb_dst  = UInt(OUTPUT, 5)
+  val rs      = UInt(OUTPUT, 5)
+  val rt      = UInt(OUTPUT, 5)
   val wb_sel  = UInt(OUTPUT, wb_len)
   val rf_wen  = Bool(OUTPUT)
   val mem_ren = Bool(OUTPUT)
@@ -360,7 +365,6 @@ class PipeEXE extends Module {
     val wreg = Bool(OUTPUT)
 
     // forward
-    // val mem_dst = UInt(INPUT, 5)
     val exe_out = UInt(OUTPUT, 32)
   }
 
@@ -403,9 +407,13 @@ class PipeEXE extends Module {
   val reg_mem_ren  = Reg(init = UInt(0),     next = io.id.mem_ren)
   val reg_mem_wen  = Reg(init = UInt(0),     next = io.id.mem_wen)
   val reg_wb_sel   = Reg(init = UInt(0),     next = io.id.wb_sel)
+  val reg_rs       = Reg(init = UInt(0),     next = io.id.rs)
+  val reg_rt       = Reg(init = UInt(0),     next = io.id.rt)
   val reg_inst     = Reg(init = UInt(0),     next = io.id.inst)
 
   io.ctrl.inst    := reg_inst
+  io.ctrl.rs      := reg_rs
+  io.ctrl.rt      := reg_rt
   io.ctrl.alu_out := reg_exec_out
   io.ctrl.data_b  := reg_data_b
   io.ctrl.rf_wen  := reg_rf_wen
@@ -425,7 +433,6 @@ class MEMSignals extends Bundle {
 
 class MEM2WBSignals extends Bundle {
   val inst = UInt(OUTPUT, 32)
-  val alu_out  = UInt(OUTPUT, 32)
   val mem_data = UInt(OUTPUT, 32)
   val mem_ren  = Bool(OUTPUT)
   val wb_dst  = UInt(OUTPUT, 5)
@@ -462,28 +469,27 @@ class PipeMEM extends Module {
   io.wreg := io.exe.rf_wen
   io.rd := io.exe.wb_dst
 
-  // Mem operation
-  io.mem.wen    := io.exe.mem_wen
-  io.mem.addr   := (io.exe.alu_out >> UInt(2))
-  io.mem.data_a := io.exe.data_b
-
-  val mem_out =  MuxLookup(io.exe.wb_sel, UInt(0), Array(
+  val mem_out = MuxLookup(io.exe.wb_sel, UInt(0), Array(
     wb_alu -> io.exe.alu_out,
     wb_mem -> Mux(io.exe.mem_wen, io.exe.data_b, io.mem.data_b)
   ))
+
   // reg buffer
-  val reg_mem_ren = Reg(init = UInt(0), next = io.exe.mem_ren)
-  val reg_rf_wen  = Reg(init = UInt(0), next = io.exe.rf_wen)
+  val reg_rd      = Reg(init = UInt(0), next = io.exe.wb_dst)
   val reg_mem_out = Reg(init = UInt(0), next = mem_out)
-  // val reg_alu_out = Reg(init = UInt(0), next = io.exe.alu_out)
+  val reg_mem_ren = Reg(init = Bool(false), next = io.exe.mem_ren)
+  val reg_rf_wen  = Reg(init = UInt(0), next = io.exe.rf_wen)
   val reg_wb_sel  = Reg(init = UInt(0), next = io.exe.wb_sel)
   val reg_wb_dst  = Reg(init = UInt(0), next = io.exe.wb_dst)
   val reg_inst    = Reg(init = UInt(0), next = io.exe.inst)
 
-  // output
+  // Mem operation
+  io.mem.wen    := io.exe.mem_wen
+  io.mem.addr   := (io.exe.alu_out >> UInt(2))
+  io.mem.data_a := Mux( reg_mem_ren & io.exe.rt === reg_rd, reg_mem_out, io.exe.data_b)
 
+  // output
   io.ctrl.inst  := reg_inst
-  // io.ctrl.alu_out := reg_alu_out
   io.ctrl.mem_data := reg_mem_out
   io.ctrl.mem_ren := reg_mem_ren
   io.ctrl.wb_dst := reg_wb_dst
@@ -491,8 +497,8 @@ class PipeMEM extends Module {
   io.ctrl.rf_wen := reg_rf_wen
 
   // forward
-  io.mem_out := mem_out // reg_mem_rd
-  io.mem_dst := io.exe.wb_dst // reg_wb_dst
+  io.mem_out := mem_out
+  io.mem_dst := io.exe.wb_dst
 }
 
 class PipeWB extends Module {
@@ -580,6 +586,7 @@ class CoreCPU extends Module {
   Stall.wreg_wb := WB.wreg
 
   Stall.exe_mem_ren := EXE.id.mem_ren
+  Stall.inst := IF.inst
 
   IF.stall := Stall.stall
   ID.stall := Stall.stall
