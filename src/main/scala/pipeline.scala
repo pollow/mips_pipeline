@@ -202,35 +202,45 @@ class PipeID extends Module {
   // valid, branch, da, db, ext, op1, op2, ALU_op, wb_sel, reg_wb, rf_w, mem_ren, mem_wen
     List(N, br_n, da_x, db_x, xext, op1_x, op2_x, alu_x, wb_x, reg_x, N, N, N),
     Array(
-      NOP_  -> List(Y, br_n,  da_x, db_x, xext, op1_x, op2_x, alu_x  , wb_x,     reg_x,  N, N, N),
+      NOP_    -> List(Y, br_n,  da_x, db_x, xext, op1_x, op2_x, alu_x  , wb_x,     reg_x,  N, N, N),
 
-      ADD_  -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_add, wb_alu, reg_rd, Y, N, N),
-      SUB_  -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_sub, wb_alu, reg_rd, Y, N, N),
-      AND_  -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_and, wb_alu, reg_rd, Y, N, N),
-      OR_   -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_or , wb_alu, reg_rd, Y, N, N),
-      XOR_  -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_xor, wb_alu, reg_rd, Y, N, N),
-      SLT_  -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_slt, wb_alu, reg_rd, Y, N, N),
-      SLL_  -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_sll, wb_alu, reg_rd, Y, N, N),
-      SRL_  -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_srl, wb_alu, reg_rd, Y, N, N),
-      SRA_  -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_sra, wb_alu, reg_rd, Y, N, N),
+      ADD_    -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_add, wb_alu, reg_rd, Y, N, N),
+      SUB_    -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_sub, wb_alu, reg_rd, Y, N, N),
+      ADDU_   -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_add, wb_alu, reg_rd, Y, N, N),
+      SUBU_   -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_sub, wb_alu, reg_rd, Y, N, N),
+      AND_    -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_and, wb_alu, reg_rd, Y, N, N),
+      OR_     -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_or , wb_alu, reg_rd, Y, N, N),
+      NOR_    -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_nor, wb_alu, reg_rd, Y, N, N),
+      XOR_    -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_xor, wb_alu, reg_rd, Y, N, N),
+      SLT_    -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_slt, wb_alu, reg_rd, Y, N, N),
+      SLL_    -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_sll, wb_alu, reg_rd, Y, N, N),
+      SRL_    -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_srl, wb_alu, reg_rd, Y, N, N),
+      SRA_    -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_sra, wb_alu, reg_rd, Y, N, N),
+      SLTU_   -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_sltu, wb_alu, reg_rd, Y, N, N),
+      SLLV_   -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_sllv, wb_alu, reg_rd, Y, N, N),
+      SRLV_   -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_srlv, wb_alu, reg_rd, Y, N, N),
+      SRAV_   -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_srav, wb_alu, reg_rd, Y, N, N),
 
-      JR_   -> List(Y, br_jr, da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_pc , reg_ra, N, N, N),
-      JALR_ -> List(Y, br_jr, da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_pc , reg_ra, Y, N, N),
+      JR_     -> List(Y, br_jr, da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_pc , reg_ra, N, N, N),
+      JALR_   -> List(Y, br_jr, da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_pc , reg_ra, Y, N, N),
 
-      ADDI_ -> List(Y, br_n,  da_a, db_x, sext, op1_x, op2_imm, alu_add, wb_alu, reg_rt, Y, N, N),
-      ANDI_ -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_and, wb_alu, reg_rt, Y, N, N),
-      ORI_  -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_or , wb_alu, reg_rt, Y, N, N),
-      XORI_ -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_xor, wb_alu, reg_rt, Y, N, N),
+      ADDI_   -> List(Y, br_n,  da_a, db_x, sext, op1_x, op2_imm, alu_add, wb_alu, reg_rt, Y, N, N),
+      ANDI_   -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_and, wb_alu, reg_rt, Y, N, N),
+      ORI_    -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_or , wb_alu, reg_rt, Y, N, N),
+      XORI_   -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_xor, wb_alu, reg_rt, Y, N, N),
+      SLTI_   -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_or , wb_alu, reg_rt, Y, N, N),
+      SLTIU_  -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_xor, wb_alu, reg_rt, Y, N, N),
+      ADDIU_  -> List(Y, br_n,  da_a, db_x, sext, op1_x, op2_imm, alu_add, wb_alu, reg_rt, Y, N, N),
 
-      LW_   -> List(Y, br_n,  da_a, db_x, sext, op1_a, op2_imm, alu_add, wb_mem, reg_rt, Y, Y, N),
-      SW_   -> List(Y, br_n,  da_a, db_b, sext, op1_a, op2_imm, alu_add, wb_mem, reg_rt, N, N, Y),
+      LW_     -> List(Y, br_n,  da_a, db_x, sext, op1_a, op2_imm, alu_add, wb_mem, reg_rt, Y, Y, N),
+      SW_     -> List(Y, br_n,  da_a, db_b, sext, op1_a, op2_imm, alu_add, wb_mem, reg_rt, N, N, Y),
 
-      BEQ_  -> List(Y, br_eq, da_a, db_b, sext, op1_x, op2_imm, alu_add, wb_alu, reg_rt, N, N, N),
-      BNE_  -> List(Y, br_ne, da_a, db_b, sext, op1_x, op2_imm, alu_and, wb_alu, reg_rt, N, N, N),
-      LUI_  -> List(Y, br_n,  da_a, db_x, xext, op1_x, op2_imm, alu_lui, wb_alu, reg_rt, Y, N, N),
+      BEQ_    -> List(Y, br_eq, da_a, db_b, sext, op1_x, op2_imm, alu_add, wb_alu, reg_rt, N, N, N),
+      BNE_    -> List(Y, br_ne, da_a, db_b, sext, op1_x, op2_imm, alu_and, wb_alu, reg_rt, N, N, N),
+      LUI_    -> List(Y, br_n,  da_a, db_x, xext, op1_x, op2_imm, alu_lui, wb_alu, reg_rt, Y, N, N),
 
-      J_    -> List(Y, br_j,  da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_x,     reg_ra, N, N, N),
-      JAL_  -> List(Y, br_j,  da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_pc,    reg_ra, Y, N, N)
+      J_      -> List(Y, br_j,  da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_x,     reg_ra, N, N, N),
+      JAL_    -> List(Y, br_j,  da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_pc,    reg_ra, Y, N, N)
     ))
 
   val (valid_signal : Bool) :: br_type :: data_a_sel :: data_b_sel :: extend_type :: op1_sel :: op2_sel :: alu_op :: wb_sel :: reg_dst :: (rf_wen : Bool) :: (mem_ren : Bool) :: (mem_wen : Bool) :: Nil = id_ctrl_signals
@@ -388,16 +398,21 @@ class PipeEXE extends Module {
   io.exe_out := exec_alu_out
 
   exec_alu_out := MuxLookup(io.id.alu_op, UInt(0), Array(
-    alu_add -> (op1 + op2)(31, 0),
-    alu_sub -> (op1 - op2),
-    alu_and -> (op1 & op2),
-    alu_or  -> (op1 | op2),
-    alu_xor -> (op1 ^ op2),
-    alu_slt -> (op1 < op2).toUInt(),
-    alu_sll -> (op2 << io.id.shamt)(31, 0).toUInt(),
-    alu_srl -> (op2 >> io.id.shamt)(31, 0).toUInt(),
-    alu_sra -> (op2.toSInt() >> io.id.shamt).toUInt(),
-    alu_lui -> Cat(op2(15, 0), Fill(16, UInt(0)))
+    alu_add     -> (op1 + op2)(31, 0),
+    alu_sub     -> (op1 - op2),
+    alu_and     -> (op1 & op2),
+    alu_or      -> (op1 | op2),
+    alu_xor     -> (op1 ^ op2),
+    alu_nor     -> ~ (op1 | op2),
+    alu_slt     -> (op1.toSInt() < op2.toSInt()).toUInt(),
+    alu_sltu    -> (op1 < op2).toUInt(),
+    alu_sll     -> (op2 << io.id.shamt)(31, 0).toUInt(),
+    alu_srl     -> (op2 >> io.id.shamt)(31, 0).toUInt(),
+    alu_sra     -> (op2.toSInt() >> io.id.shamt).toUInt(),
+    alu_sllv    -> (op2 << op1)(31, 0).toUInt(),
+    alu_srlv    -> (op2 >> op1)(31, 0).toUInt(),
+    alu_srav    -> (op2.toSInt() >> op1).toUInt(),
+    alu_lui     -> Cat(op2(15, 0), Fill(16, UInt(0)))
   ))
 
   // TODO JAL support
