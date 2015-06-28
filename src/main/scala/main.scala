@@ -28,7 +28,6 @@ class Main extends Module {
 }
 
 class TopTests(c : Main) extends Tester(c) {
-  poke(c.io.inst, 0)
   step(2)
   reset(1)
   for(i <- 0 to 60) {

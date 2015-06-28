@@ -42,6 +42,7 @@ class PipeIF extends Module {
     val pcsource  = UInt(INPUT, width = pc_sel_len)
     val bpc       = UInt(INPUT, width = 32)
     val jpc       = UInt(INPUT, width = 32)
+    val jrpc      = UInt(INPUT, width = 32)
 
     val stall     = Bool(INPUT)
     val brt       = Bool(INPUT)
@@ -58,7 +59,8 @@ class PipeIF extends Module {
   next_pc := MuxLookup(io.pcsource, pc_plus_4, Array(
     pc_plus4   -> pc_plus_4,
     jump_pc    -> io.jpc,
-    branch_pc  -> io.bpc
+    branch_pc  -> io.bpc,
+    jr_pc      -> io.jrpc
   ))
 
   val inst_r = Reg(init = UInt(0))
@@ -139,6 +141,7 @@ class PipeID extends Module {
     val pcsource = UInt(OUTPUT, pc_sel_len)
     val bpc      = UInt(OUTPUT, 32)
     val jpc      = UInt(OUTPUT, 32)
+    val jrpc     = UInt(OUTPUT, 32)
 
     // stall
     val stall = Bool(INPUT)
@@ -217,30 +220,30 @@ class PipeID extends Module {
       SRL_    -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_srl, wb_alu, reg_rd, Y, N, N),
       SRA_    -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_sra, wb_alu, reg_rd, Y, N, N),
       SLTU_   -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_sltu, wb_alu, reg_rd, Y, N, N),
-      SLLV_   -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_sllv, wb_alu, reg_rd, Y, N, N),
-      SRLV_   -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_srlv, wb_alu, reg_rd, Y, N, N),
-      SRAV_   -> List(Y, br_n,  da_x, db_b, xext, op1_x, op2_b, alu_srav, wb_alu, reg_rd, Y, N, N),
+      SLLV_   -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_sllv, wb_alu, reg_rd, Y, N, N),
+      SRLV_   -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_srlv, wb_alu, reg_rd, Y, N, N),
+      SRAV_   -> List(Y, br_n,  da_a, db_b, xext, op1_a, op2_b, alu_srav, wb_alu, reg_rd, Y, N, N),
 
-      JR_     -> List(Y, br_jr, da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_pc , reg_ra, N, N, N),
+      JR_     -> List(Y, br_jr, da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_x , reg_x, N, N, N),
       JALR_   -> List(Y, br_jr, da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_pc , reg_ra, Y, N, N),
 
       ADDI_   -> List(Y, br_n,  da_a, db_x, sext, op1_x, op2_imm, alu_add, wb_alu, reg_rt, Y, N, N),
       ANDI_   -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_and, wb_alu, reg_rt, Y, N, N),
       ORI_    -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_or , wb_alu, reg_rt, Y, N, N),
       XORI_   -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_xor, wb_alu, reg_rt, Y, N, N),
-      SLTI_   -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_or , wb_alu, reg_rt, Y, N, N),
-      SLTIU_  -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_xor, wb_alu, reg_rt, Y, N, N),
-      ADDIU_  -> List(Y, br_n,  da_a, db_x, sext, op1_x, op2_imm, alu_add, wb_alu, reg_rt, Y, N, N),
+      SLTI_   -> List(Y, br_n,  da_a, db_x, sext, op1_x, op2_imm, alu_slt, wb_alu, reg_rt, Y, N, N),
+      SLTIU_  -> List(Y, br_n,  da_a, db_x, sext, op1_x, op2_imm, alu_sltu, wb_alu, reg_rt, Y, N, N),
+      ADDIU_  -> List(Y, br_n,  da_a, db_x, zext, op1_x, op2_imm, alu_add, wb_alu, reg_rt, Y, N, N),
 
       LW_     -> List(Y, br_n,  da_a, db_x, sext, op1_a, op2_imm, alu_add, wb_mem, reg_rt, Y, Y, N),
-      SW_     -> List(Y, br_n,  da_a, db_b, sext, op1_a, op2_imm, alu_add, wb_mem, reg_rt, N, N, Y),
+      SW_     -> List(Y, br_n,  da_a, db_b, sext, op1_a, op2_imm, alu_add, wb_mem, reg_x, N, N, Y),
 
       BEQ_    -> List(Y, br_eq, da_a, db_b, sext, op1_x, op2_imm, alu_add, wb_alu, reg_rt, N, N, N),
       BNE_    -> List(Y, br_ne, da_a, db_b, sext, op1_x, op2_imm, alu_and, wb_alu, reg_rt, N, N, N),
       LUI_    -> List(Y, br_n,  da_a, db_x, xext, op1_x, op2_imm, alu_lui, wb_alu, reg_rt, Y, N, N),
 
-      J_      -> List(Y, br_j,  da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_x,     reg_ra, N, N, N),
-      JAL_    -> List(Y, br_j,  da_a, db_x, xext, op1_x, op2_x, alu_x  , wb_pc,    reg_ra, Y, N, N)
+      J_      -> List(Y, br_j,  da_x, db_x, xext, op1_x, op2_x, alu_x  , wb_x,     reg_x, N, N, N),
+      JAL_    -> List(Y, br_j,  da_x, db_x, xext, op1_x, op2_x, alu_x  , wb_pc,    reg_ra, Y, N, N)
     ))
 
   val (valid_signal : Bool) :: br_type :: data_a_sel :: data_b_sel :: extend_type :: op1_sel :: op2_sel :: alu_op :: wb_sel :: reg_dst :: (rf_wen : Bool) :: (mem_ren : Bool) :: (mem_wen : Bool) :: Nil = id_ctrl_signals
@@ -288,7 +291,6 @@ class PipeID extends Module {
     }
   }
 
-
   // Branch Taken
   val equ = op1 === op2
 
@@ -305,14 +307,16 @@ class PipeID extends Module {
       br_eq -> branch_pc,
       br_ne -> branch_pc,
       br_j  -> jump_pc,
-      br_n  -> pc_plus4
+      br_n  -> pc_plus4,
+      br_jr -> jr_pc
     ))
   } .otherwise {
     io.pcsource := pc_plus4
   }
 
-  io.bpc := io.pc4 + (sign_imm << UInt(2))
-  io.jpc := Cat(io.pc4(31, 28), addr, Fill(2, UInt(0)))
+  io.bpc   := io.pc4 + (sign_imm << UInt(2))
+  io.jpc   := Cat(io.pc4(31, 28), addr, Fill(2, UInt(0)))
+  io.jrpc  := op1
 
   val reg_inst    = Reg(init = UInt(0), next = inst)
   val reg_brt     = Reg(init = Bool(false), next = brt)
@@ -354,6 +358,7 @@ class PipeID extends Module {
 
 class EXE2MEMSignals extends Bundle {
   val inst    = UInt(OUTPUT, 32)
+  val pc4     = UInt(OUTPUT, 32)
   val alu_out = UInt(OUTPUT, 32)
   val data_b  = UInt(OUTPUT, 32)
   val wb_dst  = UInt(OUTPUT, 5)
@@ -404,13 +409,13 @@ class PipeEXE extends Module {
     alu_or      -> (op1 | op2),
     alu_xor     -> (op1 ^ op2),
     alu_nor     -> ~ (op1 | op2),
-    alu_slt     -> (op1.toSInt() < op2.toSInt()).toUInt(),
+    alu_slt     -> (op1.toSInt < op2.toSInt).toUInt,
     alu_sltu    -> (op1 < op2).toUInt(),
     alu_sll     -> (op2 << io.id.shamt)(31, 0).toUInt(),
     alu_srl     -> (op2 >> io.id.shamt)(31, 0).toUInt(),
     alu_sra     -> (op2.toSInt() >> io.id.shamt).toUInt(),
-    alu_sllv    -> (op2 << op1)(31, 0).toUInt(),
-    alu_srlv    -> (op2 >> op1)(31, 0).toUInt(),
+    alu_sllv    -> ((op2 << op1)(31, 0)).toUInt(),
+    alu_srlv    -> ((op2 >> op1)(31, 0)).toUInt(),
     alu_srav    -> (op2.toSInt() >> op1).toUInt(),
     alu_lui     -> Cat(op2(15, 0), Fill(16, UInt(0)))
   ))
@@ -425,8 +430,10 @@ class PipeEXE extends Module {
   val reg_rs       = Reg(init = UInt(0),     next = io.id.rs)
   val reg_rt       = Reg(init = UInt(0),     next = io.id.rt)
   val reg_inst     = Reg(init = UInt(0),     next = io.id.inst)
+  val reg_pc4      = Reg(init = UInt(0),     next = io.id.pc4)
 
   io.ctrl.inst    := reg_inst
+  io.ctrl.pc4     := reg_pc4
   io.ctrl.rs      := reg_rs
   io.ctrl.rt      := reg_rt
   io.ctrl.alu_out := reg_exec_out
@@ -448,6 +455,7 @@ class MEMSignals extends Bundle {
 
 class MEM2WBSignals extends Bundle {
   val inst = UInt(OUTPUT, 32)
+  val pc4 = UInt(OUTPUT, 32)
   val mem_data = UInt(OUTPUT, 32)
   val mem_ren  = Bool(OUTPUT)
   val wb_dst  = UInt(OUTPUT, 5)
@@ -458,10 +466,19 @@ class MEM2WBSignals extends Bundle {
 class Memory extends Module {
   val io = new MEMSignals()
 
-  val memory = Vec.fill(32) { Reg(init = Bits(0, width = 32)) }
+  val memory = Vec.fill(32) { Reg(init = Bits(0x0, width = 32)) }
+
+  memory(5) := Reg(init = Bits(0x4, width = 32))
+  memory(6) := Reg(init = Bits(0x10, width = 32))
+
+  // for(i <- 0 to 31) {
+  //   if (i == 5) { memory(i) := Reg(init = UInt(0x4, width= 32).toBits()) }
+  //   else if (i == 6) { memory(i) := Reg(init = UInt(0x10, width= 32).toBits()) }
+  //   else {memory(i) := Reg(init = UInt(0x0, width= 32).toBits()) }
+  // }
 
   when (io.wen) {
-    memory(io.addr) := io.data_a
+    (memory(io.addr)) := io.data_a
     io.data_b := UInt(0)
   } .otherwise {
     io.data_b := memory(io.addr)
@@ -486,7 +503,8 @@ class PipeMEM extends Module {
 
   val mem_out = MuxLookup(io.exe.wb_sel, UInt(0), Array(
     wb_alu -> io.exe.alu_out,
-    wb_mem -> Mux(io.exe.mem_wen, io.exe.data_b, io.mem.data_b)
+    wb_mem -> Mux(io.exe.mem_wen, io.exe.data_b, io.mem.data_b),
+    wb_pc  -> io.exe.pc4
   ))
 
   // reg buffer
@@ -497,6 +515,7 @@ class PipeMEM extends Module {
   val reg_wb_sel  = Reg(init = UInt(0), next = io.exe.wb_sel)
   val reg_wb_dst  = Reg(init = UInt(0), next = io.exe.wb_dst)
   val reg_inst    = Reg(init = UInt(0), next = io.exe.inst)
+  val reg_pc4     = Reg(init = UInt(0), next = io.exe.pc4)
 
   // Mem operation
   io.mem.wen    := io.exe.mem_wen
@@ -505,6 +524,7 @@ class PipeMEM extends Module {
 
   // output
   io.ctrl.inst  := reg_inst
+  io.ctrl.pc4   := reg_pc4
   io.ctrl.mem_data := reg_mem_out
   io.ctrl.mem_ren := reg_mem_ren
   io.ctrl.wb_dst := reg_wb_dst
@@ -575,6 +595,7 @@ class CoreCPU extends Module {
   IF.pcsource := ID.pcsource
   IF.bpc      := ID.bpc
   IF.jpc      := ID.jpc
+  IF.jrpc     := ID.jrpc
   IF.brt      := ID.ctrl.brt
 
   io.pc := IF.pc

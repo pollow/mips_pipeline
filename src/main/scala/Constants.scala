@@ -20,7 +20,7 @@ object MIPSInstructions {
   def AND_                = Bits("b000000????????????????????100100")
   def OR_                 = Bits("b000000????????????????????100101")
   def XOR_                = Bits("b000000????????????????????100110")
-  def NOR_                = Bits("b000000????????????????????110111")
+  def NOR_                = Bits("b000000????????????????????100111")
   def SLT_                = Bits("b000000????????????????????101010")
   def SLTU_               = Bits("b000000????????????????????101011")
   def SLL_                = Bits("b000000????????????????????000000")
@@ -67,8 +67,7 @@ trait PCSourceConstants {
 trait ALUOpConstants {
   val alu_size = 15
   val alu_len = log2(alu_size)
-  val alu_add :: alu_sub :: alu_or :: alu_and :: alu_xor :: alu_slt :: alu_sltu :: alu_sll :: alu_srl :: alu_sra :: alu_lui :: alu_nor ::
-    alu_sllv :: alu_srlv :: alu_srav :: Nil= Enum(UInt(), alu_size)
+  val alu_add :: alu_sub :: alu_or :: alu_and :: alu_xor :: alu_slt :: alu_sltu :: alu_sll :: alu_srl :: alu_sra :: alu_lui :: alu_nor :: alu_sllv :: alu_srlv :: alu_srav :: Nil= Enum(UInt(), alu_size)
   val alu_x = alu_add
 }
 
@@ -139,35 +138,33 @@ with ALUOpConstants
 with ControlSignal
 {
   val test_instructions = List(
-    0x20010001,
-    0x00211020,
-    0x00011825,
-    0x00612024,
-    0x10640002,
-    0x2001ffff,
-    0x08000000,
-    0xac020000,
-    0x8c010000,
-    0x00211020,
-    0x00011825,
-    0x00212024,
-    0xac040008,
-    0x8c030000,
-    0x00612020,
-    0x2081fffd,
-    0x20210002,
-    0x8c010000,
-    0x20420001,
-    0x1461000a,
-    0x8c040000,
-    0x1464000a,
-    0x8c050000,
-    0xac050004,
-    0x8c040004,
-    0xac820006,
-    0x8c810006,
-    0x08000000,
-    0x00000000
+    0x8c010014,
+    0x8c030018,
+    0x00600008,
+    0x00411020,
+    0x00411020,
+    0x00412021,
+    0x00822823,
+    0x00853026,
+    0x00c53827,
+    0x00c7282a,
+    0x00c7282b,
+    0x00a64004,
+    0xac080014,
+    0x01074806,
+    0x01075007,
+    0x0c000011,
+    0x00411020,
+    0x27eb0008,
+    0x396c00ff,
+    0x3c0d0001,
+    0x8c010014,
+    0x2d8effff,
+    0x298effff,
+    0x1428fffb,
+    0x00220820,
+    0x1428fff9,
+    0x00220820
   )
 
 }
